@@ -11,6 +11,13 @@ on:
     tags: [ "v*" ]
   pull_request:
     branches: [ "main" ]
+  workflow_dispatch:  # 允许手动触发
+    inputs:
+      reason:
+        description: 'Build reason'
+        required: false
+        default: 'Manual build'
+        type: string
 
 permissions:
   contents: write
