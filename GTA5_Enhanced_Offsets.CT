@@ -1,0 +1,299 @@
+<?xml version="1.0" encoding="utf-8"?>
+<CheatTable CheatEngineTableVersion="42">
+  <CheatEntries>
+    <CheatEntry>
+      <ID>1</ID>
+      <Description>"显示指针偏移量"</Description>
+      <Options moManualExpandCollapse="1" moHideChildren="1"/>
+      <VariableType>Auto Assembler Script</VariableType>
+      <AssemblerScript>{ Game   : GTA5_Enhanced.exe
+  Version: 
+  Date   : 2025-12-16
+  Author : Offset Dumper
+}
+
+[ENABLE]
+// 这个脚本用于显示指针偏移量
+
+[DISABLE]
+</AssemblerScript>
+      <CheatEntries>
+        <CheatEntry>
+          <ID>2</ID>
+          <Description>"运行指针扫描并显示偏移量"</Description>
+          <VariableType>Auto Assembler Script</VariableType>
+          <AssemblerScript>{ Game   : GTA5_Enhanced.exe
+  Version: 
+  Date   : 2025-12-16
+  Author : Offset Dumper
+}
+
+[ENABLE]
+{$lua}
+-- 特征码获取和偏移量显示脚本
+function getPTRAndShowOffsets()
+  -- 获取模块基址
+  local moduleBase = getAddress("GTA5_Enhanced.exe")
+  
+  -- 打开日志文件
+  local logFile = io.open("gta偏移量.log", "w")
+  if not logFile then
+    print("无法创建日志文件")
+    return
+  end
+  
+  -- 定义日志输出函数
+  local function log(message)
+    print(message)
+    logFile:write(message .. "\n")
+  end
+  
+  -- 开始日志
+  log("=== GTA5 Enhanced Pointer Scanner ===")
+  log(string.format("Module Base: \"GTA5_Enhanced.exe\"+%08X", moduleBase - moduleBase))
+  
+  -- 定义特征码扫描
+  local aobScripts = {
+    "aobscanmodule(WorldPTR,GTA5_Enhanced.exe,48 8B 0D ?? ?? ?? ?? 48 85 C9 74 ?? 48 8B 49 ?? 48 8D)",
+    "registersymbol(WorldPTR)",
+    "aobscanmodule(GlobalPTR,GTA5_Enhanced.exe,48 8D 3D ?? ?? ?? ?? 31 DB 48 8D 2D ?? ?? ?? ?? 4C)",
+    "registersymbol(GlobalPTR)",
+    "aobscanmodule(ReplayInterfacePTR,GTA5_Enhanced.exe,48 8B 05 ?? ?? ?? ?? 48 8B 3C D8 48 8B)",
+    "registersymbol(ReplayInterfacePTR)",
+    "aobscanmodule(WayPointPTR,GTA5_Enhanced.exe,48 8D 0D ?? ?? ?? ?? C6 44 08 ?? 01 C7)",
+    "registersymbol(WayPointPTR)",
+    "aobscanmodule(BlipPtr,GTA5_Enhanced.exe,48 8D 0D ? ? ? ? 41 B8 ? ? ? ? 31 D2 E8 ? ? ? ? 8B 0D)",
+    "registersymbol(BlipPtr)",
+    "aobscanmodule(LocalScriptsPTR,GTA5_Enhanced.exe,48 8B 05 ? ? ? ? 48 89 34 F8 48 FF C7 48 39 FB 75 97)",
+    "registersymbol(LocalScriptsPTR)",
+    "aobscanmodule(CNetworkPlayerMgrPTR,GTA5_Enhanced.exe,75 0E 48 8B 05 ? ? ? ? 48 8B 88 F0 00 00 00)",
+    "registersymbol(CNetworkPlayerMgrPTR)",
+    "aobscanmodule(AimCPedPTR,GTA5_Enhanced.exe,48 8D 0D ?? ?? ?? ?? E8 ?? ?? ?? ?? 8B 0D ?? ?? ?? ?? 4C 8D 05 ?? ?? ?? ?? BA)",
+    "registersymbol(AimCPedPTR)",
+    "aobscanmodule(GTAPlusPTR,GTA5_Enhanced.exe,48 8D 15 ? ? ? ? 41 B8 18 02 00 00 E8)",
+    "registersymbol(GTAPlusPTR)"
+  }
+  
+  -- 执行特征码扫描
+  autoAssemble(table.concat(aobScripts, "\n"))
+  
+  -- 定义偏移量计算参数
+  local ptrConfigs = {
+    { symbol = "WorldPTR", name = "WorldPtr", dispOffset = 3, calcOffset = 7 },
+    { symbol = "GlobalPTR", name = "GlobalPtr", dispOffset = 3, calcOffset = 7 },
+    { symbol = "ReplayInterfacePTR", name = "ReplayInterfacePtr", dispOffset = 3, calcOffset = 7 },
+    { symbol = "WayPointPTR", name = "WayPointPtr", dispOffset = 3, calcOffset = 7 },
+    { symbol = "BlipPtr", name = "BlipPtr", dispOffset = 3, calcOffset = 7 },
+    { symbol = "LocalScriptsPTR", name = "LocalScriptsPtr", dispOffset = 3, calcOffset = 7 },
+    { symbol = "CNetworkPlayerMgrPTR", name = "CNetworkPlayerMgrPtr", dispOffset = 5, calcOffset = 9 },
+    { symbol = "AimCPedPTR", name = "AimCPedPtr", dispOffset = 3, calcOffset = 7 },
+    { symbol = "GTAPlusPTR", name = "GTA+Ptr", dispOffset = 3, calcOffset = 7 }
+  }
+  
+  -- 显示所有结构偏移量
+  
+  -- CPed 结构偏移量
+  log("\n=== CPed Structure Offsets ===")
+  log(string.format("CPed.Stealth: 0x%08X", 0x2C))
+  log(string.format("CPed.proof: 0x%08X", 0x188))
+  log(string.format("CPed.God: 0x%08X", 0x189))
+  log(string.format("CPed.Hostility: 0x%08X", 0x18C))
+  log(string.format("CPed.CNavigation: 0x%08X", 0x30))
+  log(string.format("CPed.VisualX: 0x%08X", 0x90))
+  log(string.format("CPed.Health: 0x%08X", 0x280))
+  log(string.format("CPed.MaxHealth: 0x%08X", 0x284))
+  log(string.format("CPed.isCVehicle: 0x%08X", 0xE32))
+  log(string.format("CPed.CVehicle: 0x%08X", 0xD10))
+  log(string.format("CPed.Ragdoll: 0x%08X", 0x1098))
+  log(string.format("CPed.CPlayerInfo: 0x%08X", 0x10A8))
+  log(string.format("CPed.CPedInventory: 0x%08X", 0x10B0))
+  log(string.format("CPed.CPedWeaponManager: 0x%08X", 0x10B8))
+  log(string.format("CPed.SeatBelt: 0x%08X", 0x143C))
+  log(string.format("CPed.Armor: 0x%08X", 0x150C))
+  
+  -- CPlayerInfo 结构偏移量
+  log("\n=== CPlayerInfo Structure Offsets ===")
+  log(string.format("CPlayerInfo.Wantedlevel: 0x%08X", 0x8E8))
+  log(string.format("CPlayerInfo.WantedCanChange: 0x%08X", 0x868))
+  log(string.format("CPlayerInfo.Name: 0x%08X", 0xFC))
+  log(string.format("CPlayerInfo.SwimSpeed: 0x%08X", 0x1C8))
+  log(string.format("CPlayerInfo.WalkSpeed: 0x%08X", 0x1E4))
+  log(string.format("CPlayerInfo.RunSpeed: 0x%08X", 0xD50))
+  
+  -- CVehicle 结构偏移量
+  log("\n=== CVehicle Structure Offsets ===")
+  log(string.format("CVehicle.CModelInfo: 0x%08X", 0x20))
+  log(string.format("CVehicle.CNavigation: 0x%08X", 0x30))
+  log(string.format("CVehicle.VisualX: 0x%08X", 0x90))
+  log(string.format("CVehicle.God: 0x%08X", 0x189))
+  log(string.format("CVehicle.Health: 0x%08X", 0x280))
+  log(string.format("CVehicle.Jet: 0x%08X", 0x300))
+  log(string.format("CVehicle.JetRecoverySpeed: 0x%08X", 0x304))
+  log(string.format("CVehicle.JumpRecoverySpeed: 0x%08X", 0x3A0))
+  log(string.format("CVehicle.HealthBody: 0x%08X", 0x830))
+  log(string.format("CVehicle.HealthPetrolTank: 0x%08X", 0x834))
+  log(string.format("CVehicle.HealthEngine: 0x%08X", 0x8E8))
+  
+  -- CVehicleModelInfo 结构偏移量
+  log("\n=== CVehicleModelInfo Structure Offsets ===")
+  log(string.format("CVehicleModelInfo.mod: 0x%08X", 0x18))
+  log(string.format("CVehicleModelInfo.CamDist: 0x%08X", 0x38))
+  log(string.format("CVehicleModelInfo.name: 0x%08X", 0x298))
+  log(string.format("CVehicleModelInfo.Maker: 0x%08X", 0x2A4))
+  log(string.format("CVehicleModelInfo.Additional: 0x%08X", 0x58B))
+  log(string.format("CVehicleModelInfo.Parachute: 0x%08X", 0x58C))
+  
+  -- CNavigation 结构偏移量
+  log("\n=== CNavigation Structure Offsets ===")
+  log(string.format("CNavigation.RightX: 0x%08X", 0x20))
+  log(string.format("CNavigation.RightY: 0x%08X", 0x24))
+  log(string.format("CNavigation.RightZ: 0x%08X", 0x28))
+  log(string.format("CNavigation.ForwardX: 0x%08X", 0x30))
+  log(string.format("CNavigation.ForwardY: 0x%08X", 0x34))
+  log(string.format("CNavigation.ForwardZ: 0x%08X", 0x38))
+  log(string.format("CNavigation.UpX: 0x%08X", 0x40))
+  log(string.format("CNavigation.UpY: 0x%08X", 0x44))
+  log(string.format("CNavigation.UpZ: 0x%08X", 0x48))
+  log(string.format("CNavigation.PositionX: 0x%08X", 0x50))
+  log(string.format("CNavigation.PositionY: 0x%08X", 0x54))
+  log(string.format("CNavigation.PositionZ: 0x%08X", 0x58))
+  
+  -- CPedFactory 结构偏移量
+  log("\n=== CPedFactory Structure Offsets ===")
+  log(string.format("CPedFactory.CPed: 0x%08X", 0x8))
+  
+  -- CPedWeaponManager 结构偏移量
+  log("\n=== CPedWeaponManager Structure Offsets ===")
+  log(string.format("CPedWeaponManager.CWeaponInfo: 0x%08X", 0x20))
+  
+  -- CPedInventory 结构偏移量
+  log("\n=== CPedInventory Structure Offsets ===")
+  log(string.format("CPedInventory.AmmoModifier: 0x%08X", 0x58))
+  log(string.format("CPedInventory.Infinite: 0x%08X", 0x78))
+  
+  -- CWeaponInfo 结构偏移量
+  log("\n=== CWeaponInfo Structure Offsets ===")
+  log(string.format("CWeaponInfo.AmmoType: 0x%08X", 0x20))
+  log(string.format("CWeaponInfo.ExplosiveType: 0x%08X", 0x24))
+  log(string.format("CWeaponInfo.Proliferation: 0x%08X", 0x7C))
+  log(string.format("CWeaponInfo.Penetration: 0x%08X", 0x110))
+  log(string.format("CWeaponInfo.Damage: 0x%08X", 0xB0))
+  log(string.format("CWeaponInfo.VehicleReplacementTime: 0x%08X", 0x130))
+  log(string.format("CWeaponInfo.ReplacementTime: 0x%08X", 0x134))
+  log(string.format("CWeaponInfo.WeaponSpeed: 0x%08X", 0x13C))
+  log(string.format("CWeaponInfo.lockRange: 0x%08X", 0x288))
+  log(string.format("CWeaponInfo.weaponRange: 0x%08X", 0x28C))
+  log(string.format("CWeaponInfo.WeaponRecoil: 0x%08X", 0x2F4))
+  
+  -- Base 常量
+  log("\n=== Base Constants ===")
+  log(string.format("Base.oMaxPlayers: %d", 32))
+  log(string.format("Base.oMaxPeds: %d", 256))
+  log(string.format("Base.oMaxVehicles: %d", 300))
+  log(string.format("Base.oMaxPickups: %d", 73))
+  log(string.format("Base.oMaxObjects: %d", 2300))
+  log(string.format("Base.oVMCreate: %d", 2697023))
+  log(string.format("Base.oVMYCar: %d", 2733138))
+  log(string.format("Base.oVGETIn: %d", 2640099))
+  log(string.format("Base.oVMSlots: %d", 1583772))
+  log(string.format("Base.oNETTimeHelp: %d", 2673274))
+  log(string.format("Base.oPlayerIDHelp: %d", 2658294))
+  log(string.format("Base.PlayerIndex: %d", 1574927))
+  log(string.format("Base.PlayerID: %d", 2673274))
+  log(string.format("Base.SessionSwitchType: %d", 1575044))
+  log(string.format("Base.SessionSwitchState: %d", 1574589))
+  
+  log("\n=== Pattern Scan Results ===")
+  
+  -- 显示特征码地址并计算最终地址
+  for _, config in ipairs(ptrConfigs) do
+    local addr = getAddressSafe(config.symbol)
+    if addr ~= nil then
+      local patternOffset = addr - moduleBase
+      log(string.format("%s Pattern: \"GTA5_Enhanced.exe\"+%08X", config.name, patternOffset))
+      
+      -- 计算最终地址
+      local finalAddr = addr + readInteger(addr + config.dispOffset) + config.calcOffset
+      local finalOffset = finalAddr - moduleBase
+      log(string.format("%s Final: \"GTA5_Enhanced.exe\"+%08X", config.name, finalOffset))
+      
+      -- 更新符号
+      unregisterSymbol(config.symbol)
+      registerSymbol(config.symbol, finalAddr, true)
+    else
+      log(string.format("%s: Pattern not found", config.name))
+    end
+  end
+  
+  log("\n=== Scan Complete ===")
+  
+  -- 关闭日志文件
+  logFile:close()
+  print("日志已保存到 gta偏移量.log")
+end
+
+-- 运行脚本
+getPTRAndShowOffsets()
+{$asm}
+
+[DISABLE]
+{$lua}
+-- 清理符号
+local symbols = {"WorldPTR", "GlobalPTR", "ReplayInterfacePTR", "WayPointPTR", "BlipPtr", "LocalScriptsPTR", "CNetworkPlayerMgrPTR", "AimCPedPTR", "GTAPlusPTR"}
+for _, symbol in ipairs(symbols) do
+  unregisterSymbol(symbol)
+end
+{$asm}
+</AssemblerScript>
+        </CheatEntry>
+      </CheatEntries>
+    </CheatEntry>
+  </CheatEntries>
+  <UserdefinedSymbols>
+    <SymbolEntry>
+      <Name>WorldPTR</Name>
+      <Address>0</Address>
+      <ModuleName>GTA5_Enhanced.exe</ModuleName>
+    </SymbolEntry>
+    <SymbolEntry>
+      <Name>GlobalPTR</Name>
+      <Address>0</Address>
+      <ModuleName>GTA5_Enhanced.exe</ModuleName>
+    </SymbolEntry>
+    <SymbolEntry>
+      <Name>ReplayInterfacePTR</Name>
+      <Address>0</Address>
+      <ModuleName>GTA5_Enhanced.exe</ModuleName>
+    </SymbolEntry>
+    <SymbolEntry>
+      <Name>WayPointPTR</Name>
+      <Address>0</Address>
+      <ModuleName>GTA5_Enhanced.exe</ModuleName>
+    </SymbolEntry>
+    <SymbolEntry>
+      <Name>BlipPtr</Name>
+      <Address>0</Address>
+      <ModuleName>GTA5_Enhanced.exe</ModuleName>
+    </SymbolEntry>
+    <SymbolEntry>
+      <Name>LocalScriptsPTR</Name>
+      <Address>0</Address>
+      <ModuleName>GTA5_Enhanced.exe</ModuleName>
+    </SymbolEntry>
+    <SymbolEntry>
+      <Name>CNetworkPlayerMgrPTR</Name>
+      <Address>0</Address>
+      <ModuleName>GTA5_Enhanced.exe</ModuleName>
+    </SymbolEntry>
+    <SymbolEntry>
+      <Name>AimCPedPTR</Name>
+      <Address>0</Address>
+      <ModuleName>GTA5_Enhanced.exe</ModuleName>
+    </SymbolEntry>
+    <SymbolEntry>
+      <Name>GTAPlusPTR</Name>
+      <Address>0</Address>
+      <ModuleName>GTA5_Enhanced.exe</ModuleName>
+    </SymbolEntry>
+  </UserdefinedSymbols>
+</CheatTable>
