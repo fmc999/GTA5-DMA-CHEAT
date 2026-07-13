@@ -3,11 +3,13 @@
 #include <thread>
 
 #include "MyImGui.h"
+#include "AppRuntime.h"
+#include "InputManager.h"
 
-bool bAlive = true;
 
 int main(int, char**)
 {
+	AppRuntime::Reset();
 	// Initialize ImGui
 	if (!MyImGui::Initialize())
 	{
@@ -17,18 +19,26 @@ int main(int, char**)
 
 	// Initialize DMA in a separate thread
 	std::thread DMAThread([]() {
-		if (DMA::Initialize())
+		if (!DMA::Initialize())
 		{
-			DMA::DMAThreadEntry();
+			std::cerr << "Failed to initialize DMA" << std::endl;
+			return;
 		}
+
+		if (!g_inputManager.InitKeyboard())
+		{
+			std::cerr << "Failed to initialize target keyboard input; local hotkeys remain available." << std::endl;
+		}
+
+		DMA::DMAThreadEntry();
 	});
 
 	// Main loop
-	while (bAlive)
+	while (AppRuntime::IsRunning())
 	{
 		// Handle exit keys
-		if (GetAsyncKeyState(VK_END) & 1)
-			bAlive = false;
+		if ((GetAsyncKeyState(VK_END) & 1) || g_inputManager.IsKeyPressed(VK_END))
+			AppRuntime::RequestStop();
 
 		// Render ImGui frame
 		MyImGui::OnFrame();

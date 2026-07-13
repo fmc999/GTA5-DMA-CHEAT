@@ -8,8 +8,8 @@
 #include "MyImGui.h"
 #include "MyMenu.h"
 #include "DMA.h"
+#include "AppRuntime.h"
 
-extern bool bAlive;
 
 ModeSelector::Mode ModeSelector::SelectMode() {
     std::cout << "选择模式:" << std::endl;
@@ -29,15 +29,7 @@ ModeSelector::Mode ModeSelector::SelectMode() {
     return ModeSelector::NORMAL;
 }
 
-void ModeSelector::RunDMAThread() {
-    if (!DMA::Initialize()) {
-        std::cout << "DMA初始化失败!" << std::endl;
-        return;
-    }
 
-    std::thread DMAThread(DMA::DMAThreadEntry);
-    DMAThread.detach(); // 使用detach而不是join，避免阻塞主线程
-}
 
 void ModeSelector::RunMode(Mode mode) {
     switch (mode) {
@@ -64,18 +56,28 @@ void ModeSelector::RunMode(Mode mode) {
         return;
     }
 
-    // 初始化DMA
-    RunDMAThread();
+    AppRuntime::Reset();
+    std::thread dmaThread([]() {
+        if (!DMA::Initialize()) {
+            std::cout << "DMA初始化失败!" << std::endl;
+			return;
+        }
+        DMA::DMAThreadEntry();
+    });
 
     // 主循环
-    while (bAlive) {
+    while (AppRuntime::IsRunning()) {
         // 监听多个退出按键
         if (GetAsyncKeyState(VK_END) & 1 || GetAsyncKeyState(VK_ESCAPE) & 1) {
-            bAlive = false;
+            AppRuntime::RequestStop();
             std::cout << "检测到退出按键，正在关闭..." << std::endl;
         }
 
         MyImGui::OnFrame();
+    }
+
+    if (dmaThread.joinable()) {
+        dmaThread.join();
     }
 
     MyImGui::Close();

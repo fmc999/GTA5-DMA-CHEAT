@@ -19,6 +19,8 @@ public: /* Interface variables */
 	static inline Vec3 LocalPlayerLocation = { 0,0,0 };
 
 public: /* DMA Interface function */
+	static bool IsReady() noexcept { return vmh != 0 && PID != 0; }
+	static bool IsValidAddress(uintptr_t address) noexcept { return IsReady() && address != 0; }
 	static bool Initialize();
 	static bool DMAThreadEntry();
 	static bool UpdatePlayerCurrentLocation();
@@ -53,15 +55,16 @@ public: /* Globals */
 		uintptr_t GlobalAddress = GetGlobalAddress(Index);
 		if (!GlobalAddress) return 0;
 
-		VMMDLL_MemWrite(vmh, PID, GlobalAddress, (BYTE*)&In, sizeof(T));
-
-		return 1;
+		return VMMDLL_MemWrite(vmh, PID, GlobalAddress, (BYTE*)&In, static_cast<DWORD>(sizeof(T))) != FALSE;
 	}
 
 	/* Multi-level pointer functions */
 	template <typename T>
 	static bool ReadMultiLevelPointer(uintptr_t baseAddress, const std::vector<uintptr_t>& offsets, T& outValue)
 	{
+		if (!IsValidAddress(baseAddress) || offsets.empty()) return false;
+
+
 		uintptr_t address = baseAddress;
 		DWORD bytesRead = 0;
 
@@ -81,6 +84,8 @@ public: /* Globals */
 	template <typename T>
 	static bool WriteMultiLevelPointer(uintptr_t baseAddress, const std::vector<uintptr_t>& offsets, const T& value)
 	{
+		if (!IsValidAddress(baseAddress) || offsets.empty()) return false;
+
 		uintptr_t address = baseAddress;
 		DWORD bytesRead = 0;
 
@@ -95,8 +100,7 @@ public: /* Globals */
 		}
 
 		// Write the final value
-		VMMDLL_MemWrite(vmh, PID, address + offsets.back(), (BYTE*)&value, sizeof(T));
-		return true;
+		return VMMDLL_MemWrite(vmh, PID, address + offsets.back(), (BYTE*)&value, static_cast<DWORD>(sizeof(T))) != FALSE;
 	}
 
 private: /* Private functions */

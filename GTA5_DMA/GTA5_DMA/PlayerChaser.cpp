@@ -119,7 +119,7 @@ void PlayerChaser::SearchForValue(const std::string& valueStr)
 		// Define memory regions to search
 		struct MemoryRegion {
 			uintptr_t startAddress;
-			size_t size;
+			DWORD size;
 		};
 		
 		// List of memory regions to search (expanded search范围)
@@ -135,7 +135,7 @@ void PlayerChaser::SearchForValue(const std::string& valueStr)
 		// Search in each memory region
 		for (const auto& region : regions) {
 			// Allocate buffer for reading memory
-			std::vector<uint32_t> buffer(region.size / sizeof(uint32_t));
+			std::vector<uint32_t> buffer(static_cast<size_t>(region.size) / sizeof(uint32_t));
 			DWORD bytesRead = 0;
 			
 			// Read memory from game

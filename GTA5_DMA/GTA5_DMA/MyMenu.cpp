@@ -8,6 +8,7 @@
 #include "Dev.h"
 #include "InputManager.h"
 #include "DMA.h"
+#include "Offsets.h"
 
 #include "PlayerChaserMenu.h"
 #include "Features.h"
@@ -68,9 +69,6 @@ bool SafeMemRead(uintptr_t address, T& value) {
 // 渲染融合模式窗口
 void MyMenu::RenderFusionMode()
 {
-	// 定义常量偏移量，提高可读性和可维护性
-	constexpr uintptr_t OFFSET_PLAYER_MGR = 0x04822058;
-	constexpr uintptr_t OFFSET_AIM_C_PED = 0x03EA5060;
 	constexpr uintptr_t OFFSET_MAX_PLAYERS = 0x288;
 	constexpr uintptr_t OFFSET_CURRENT_PLAYERS = 0x294;
 	constexpr uintptr_t OFFSET_HEALTH = 0x280;
@@ -106,11 +104,11 @@ void MyMenu::RenderFusionMode()
     static bool cachedHasAimTarget = false;
     static bool cachedPlayerMgrValid = false;
 
-	// 读取CNetworkPlayerMgrPtr: "GTA5_Enhanced.exe"+04822058
-	uintptr_t playerMgrAddr = DMA::BaseAddress + OFFSET_PLAYER_MGR;
+	// 读取 CNetworkPlayerMgrPtr
+	uintptr_t playerMgrAddr = DMA::BaseAddress + Offsets::PlayerMgrPtr;
 	
-	// 读取AimCPedPTR: "GTA5_Enhanced.exe"+03EA5060
-	uintptr_t aimCPedBaseAddr = DMA::BaseAddress + OFFSET_AIM_C_PED;
+	// 读取 AimCPedPTR
+	uintptr_t aimCPedBaseAddr = DMA::BaseAddress + Offsets::AimCPedPtr;
 	
 	// 只在需要更新数据时执行内存读取
 	if (shouldUpdateData) {

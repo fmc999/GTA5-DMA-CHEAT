@@ -1,59 +1,20 @@
-# Visual Studio generated files
 .vs/
-*.suo
+**/.vs/
+**/x64/
+**/Debug/
+**/Release/
 *.user
-*.vcxproj.filters
-*.vcxproj.user
-*.sln.DotSettings
-*.vbproj.user
-*.vbproj.filters
-*.db
-*.log
-
-# Build output
-x64/
-Debug/
-Release/
+*.suo
+*.VC.db
+*.VC.opendb
 *.obj
-*.pdb
 *.pch
+*.pdb
 *.ilk
-*.exe
-*.dll
-*.lib
+*.iobj
+*.ipdb
 *.tlog
 *.lastbuildstate
-
-# Temporary files
-*.tmp
-*.temp
-*.swp
-*.swo
-*~
-
-# IDE files
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# System files
+*.log
 Thumbs.db
-.DS_Store
-
-# Cache files
-.cache/
-
-# Cheat Engine files
-*.CT
-
-# DLL files from dependencies
-vmm.dll
-leechcore.dll
-FTD3XX.dll
-
-# Images
-*.png
-
-# HTML files
-*.html
+Desktop.ini

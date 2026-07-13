@@ -5,17 +5,19 @@
 #include "Features.h"
 #include "ArmorManager.h"
 #include "HealthManager.h"
+#include "AppRuntime.h"
 
 // 定义全局游戏类型
 GameType currentGameType = GameType::Unknown;
 
-// 定义Offsets命名空间中的外部变量
+// 定义 Offsets 命名空间中的外部变量
 uintptr_t Offsets::WorldPtr = Offsets::WorldPtr_Enhanced;
 uintptr_t Offsets::GlobalPtr = Offsets::GlobalPtr_Enhanced;
 uintptr_t Offsets::BlipPtr = Offsets::BlipPtr_Enhanced;
 uintptr_t Offsets::TimeBasePtr = Offsets::TimeBasePtr_Enhanced;
+uintptr_t Offsets::PlayerMgrPtr = Offsets::PlayerMgrPtr_Enhanced;
+uintptr_t Offsets::AimCPedPtr = Offsets::AimCPedPtr_Enhanced;
 
-extern bool bAlive;
 
 bool DMA::Initialize()
 {
@@ -81,7 +83,7 @@ bool DMA::Initialize()
 bool DMA::DMAThreadEntry()
 {
 
-	while (bAlive)
+	while (AppRuntime::IsRunning())
 	{
 		try
 		{
@@ -104,13 +106,15 @@ bool DMA::DMAThreadEntry()
 		Teleport::OnDMAFrame();
 		GodMode::OnDMAFrame();
 		VehicleEditor::OnDMAFrame();
-		TimeControl::OnDMAFrame();
+		// DISABLED: TimeControl implementation is retained for later restoration.
+		// TimeControl::OnDMAFrame();
 		Ragdoll::OnDMAFrame();
 		PlayerSpeed::OnDMAFrame();
 		Invisibility::OnDMAFrame();
 		NoCollision::OnDMAFrame();
-		PlayerChaser::OnDMAFrame();
-		HeistDividend::OnDMAFrame();
+		// DISABLED: PlayerChaser and HeistDividend implementations are retained for later restoration.
+		// PlayerChaser::OnDMAFrame();
+		// HeistDividend::OnDMAFrame();
 		ArmorManager::OnDMAFrame();
 		HealthManager::OnDMAFrame();
 	}

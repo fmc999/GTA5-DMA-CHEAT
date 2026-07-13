@@ -5,7 +5,10 @@
 #include "Features.h"
 #include "Dev.h"
 #include "ImGuiToolStyle.h"
+#include "ConsoleTheme.h"
 #include "InputManager.h"
+#include "Teleport.h"
+#include "AppRuntime.h"
 
 // 添加背景图片相关头文件
 #include <d3d11.h>
@@ -19,7 +22,6 @@
 #pragma comment(lib, "d3dcompiler.lib")
 #pragma comment(lib, "windowscodecs.lib")
 
-extern bool bAlive;
 
 bool MyImGui::CreateDeviceD3D(HWND hWnd)
 {
@@ -359,7 +361,10 @@ bool MyImGui::Initialize()
 	ImGui_ImplWin32_EnableDpiAwareness();
 	wc = { sizeof(wc), CS_CLASSDC, WndProc, 0L, 0L, GetModuleHandle(nullptr), nullptr, nullptr, nullptr, nullptr, L"GTA5_DMA Tool", nullptr };
 	::RegisterClassExW(&wc);
-	hwnd = ::CreateWindowW(wc.lpszClassName, L"GTA5_DMA - 多功能工具", WS_OVERLAPPEDWINDOW, 100, 100, 1400, 900, nullptr, nullptr, wc.hInstance, nullptr);
+	const int screenWidth = GetSystemMetrics(SM_CXSCREEN);
+	const int screenHeight = GetSystemMetrics(SM_CYSCREEN);
+	hwnd = ::CreateWindowExW(WS_EX_TOPMOST, wc.lpszClassName, L"GTA5 DMA", WS_POPUP,
+		0, 0, screenWidth, screenHeight, nullptr, nullptr, wc.hInstance, nullptr);
 
 	// Initialize Direct3D
 	if (!CreateDeviceD3D(hwnd))
@@ -370,7 +375,8 @@ bool MyImGui::Initialize()
 	}
 
 	// Show the window
-	::ShowWindow(hwnd, SW_SHOWDEFAULT);
+	::ShowWindow(hwnd, SW_SHOW);
+	::SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, screenWidth, screenHeight, SWP_SHOWWINDOW);
 	::UpdateWindow(hwnd);
 
 	// 加载背景图片
@@ -412,7 +418,7 @@ bool MyImGui::Initialize()
 	}
 
 	// 设置ImGui样式
-	ImGuiToolStyle::ApplyToolStyle();
+	ConsoleTheme::Apply();
 
 	// Setup Platform/Renderer backends
 	ImGui_ImplWin32_Init(hwnd);
@@ -453,9 +459,9 @@ bool MyImGui::OnFrame()
 		::TranslateMessage(&msg);
 		::DispatchMessage(&msg);
 		if (msg.message == WM_QUIT)
-			bAlive = false;
+			AppRuntime::RequestStop();
 	}
-	if (!bAlive)
+	if (!AppRuntime::IsRunning())
 		return 0;
 
 	// Handle window being minimized or screen locked
@@ -475,110 +481,38 @@ bool MyImGui::OnFrame()
 		CreateRenderTarget();
 	}
 
-	// Handle fusion mode - enter fullscreen when enabled
-	static bool bWasInFusionMode = false;
-	if (MyMenu::bFusionMode && !bWasInFusionMode) {
-		// Enter borderless fullscreen
-		LONG style = GetWindowLong(hwnd, GWL_STYLE);
-		SetWindowLong(hwnd, GWL_STYLE, style & ~WS_OVERLAPPEDWINDOW);
-		SetWindowPos(hwnd, HWND_TOP, 0, 0, GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN), SWP_FRAMECHANGED);
-		bWasInFusionMode = true;
-	}
-	else if (!MyMenu::bFusionMode && bWasInFusionMode) {
-		// Exit fullscreen
-		LONG style = GetWindowLong(hwnd, GWL_STYLE);
-		SetWindowLong(hwnd, GWL_STYLE, style | WS_OVERLAPPEDWINDOW);
-		SetWindowPos(hwnd, HWND_TOP, 100, 100, 1280, 800, SWP_FRAMECHANGED);
-		bWasInFusionMode = false;
-	}
-
 	// Start the Dear ImGui frame
 	ImGui_ImplDX11_NewFrame();
 	ImGui_ImplWin32_NewFrame();
 	ImGui::NewFrame();
 
-	// 渲染背景图片 - 最底层
-	RenderBackgroundImage();
-
-	// 首先渲染融合模式信息 - 背景图片之上
-	if (MyMenu::bFusionMode) {
-		MyMenu::RenderFusionMode();
+	// INS toggles the floating ImGui panel. The black overlay remains active.
+	static bool insertWasDown = false;
+	const bool insertIsDown = (GetAsyncKeyState(VK_INSERT) & 0x8000) != 0;
+	const bool targetInsertPressed = g_inputManager.IsKeyPressed(VK_INSERT);
+	if ((insertIsDown && !insertWasDown) || targetInsertPressed) {
+		MyMenu::bMenuVisible = !MyMenu::bMenuVisible;
 	}
+	insertWasDown = insertIsDown;
 
-	// HOME键显示/隐藏菜单
-	static bool bHomePressed = false;
-	bool bHomeCurrentlyPressed = (GetAsyncKeyState(VK_HOME) & 0x8000) != 0; // 使用Windows API直接检测HOME键
-	
-	// 检测HOME键按下事件（上升沿）
-	if (bHomeCurrentlyPressed && !bHomePressed) {
-		bHomePressed = true;
-		Dev::bShowAllMenus = !Dev::bShowAllMenus; // 切换菜单显示/隐藏
+	static bool f5WasDown = false;
+	const bool f5IsDown = (GetAsyncKeyState(VK_F5) & 0x8000) != 0;
+	const bool targetF5Pressed = g_inputManager.IsKeyPressed(VK_F5);
+	if ((f5IsDown && !f5WasDown) || targetF5Pressed) {
+		Teleport::RequestWaypointTeleport();
 	}
-	// 检测HOME键释放事件（下降沿）
-	else if (!bHomeCurrentlyPressed && bHomePressed) {
-		bHomePressed = false;
-	}
+	f5WasDown = f5IsDown;
 
-	// Render all components
-	if (Dev::bShowAllMenus) {
+	static bool f6WasDown = false;
+	const bool f6IsDown = (GetAsyncKeyState(VK_F6) & 0x8000) != 0;
+	const bool targetF6Pressed = g_inputManager.IsKeyPressed(VK_F6);
+	if ((f6IsDown && !f6WasDown) || targetF6Pressed) {
+		Teleport::RequestObjectiveTeleport();
+	}
+	f6WasDown = f6IsDown;
+
+	if (MyMenu::bMenuVisible) {
 		MyMenu::Render();
-		
-		// WeaponInspector和VehicleEditor现在已集成到主菜单中，不再作为独立窗口渲染
-		// 只渲染未集成到主菜单的功能
-		if (Teleport::bEnable)
-			Teleport::Render();
-		
-		// Dev功能在菜单显示时也显示
-		Dev::Render();
-	}
-	
-	// 在融合模式下显示活动功能 (即使隐藏了其他所有菜单)
-	if (MyMenu::bFusionMode) {
-		// 计算RGB彩色变换，确保颜色不会接近黑色
-		float time = static_cast<float>(ImGui::GetTime());
-		float r = sin(time * 1.0f) * 0.4f + 0.8f; // 范围 0.4-1.2 → 实际范围 0.4-1.0
-		float g = sin(time * 1.3f) * 0.4f + 0.8f; // 范围 0.4-1.2 → 实际范围 0.4-1.0
-		float b = sin(time * 1.7f) * 0.4f + 0.8f; // 范围 0.4-1.2 → 实际范围 0.4-1.0
-		
-		// 确保颜色不会太暗，所有通道最小值为0.6
-		r = std::max(r, 0.6f);
-		g = std::max(g, 0.6f);
-		b = std::max(b, 0.6f);
-		
-		// 确保颜色不会超过1.0
-		r = std::min(r, 1.0f);
-		g = std::min(g, 1.0f);
-		b = std::min(b, 1.0f);
-		
-		ImVec4 rainbowColor = ImVec4(r, g, b, 1.0f);
-		
-		// 直接渲染文字，没有窗口
-		ImGui::SetNextWindowPos(ImVec2(0, 320), ImGuiCond_Always);
-		ImGui::SetNextWindowSize(ImVec2(500, 200), ImGuiCond_Always);
-		
-		// 渲染文字在最底层 - 不使用ImGuiStyleVar_WindowBgAlpha，直接使用NoBackground标志
-    ImGui::Begin("ActiveFeaturesOverlay", nullptr, ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoScrollbar);
-		
-		// 当前激活功能
-		ImGui::SetWindowFontScale(1.2f);
-		ImGui::TextColored(rainbowColor, "当前激活功能:");
-		ImGui::SetWindowFontScale(1.0f);
-		
-		// 显示激活的功能，使用彩色文字
-		if (WeaponInspector::bEnable) ImGui::TextColored(rainbowColor, "- 武器检查器");
-		if (Teleport::bEnable) ImGui::TextColored(rainbowColor, "- 传送功能");
-		if (RefreshHealth::bEnable) ImGui::TextColored(rainbowColor, "- 刷新生命值");
-		if (NoWanted::bEnable) ImGui::TextColored(rainbowColor, "- 永不被通缉");
-		if (GodMode::bPlayerGodMode.load()) ImGui::TextColored(rainbowColor, "- 玩家无敌");
-		if (GodMode::bVehicleGodMode.load()) ImGui::TextColored(rainbowColor, "- 载具无敌");
-		if (VehicleEditor::bEnable) ImGui::TextColored(rainbowColor, "- 载具编辑器");
-		
-		// 添加群号信息
-		ImGui::SetWindowFontScale(1.2f);
-		ImGui::TextColored(rainbowColor, "群: 1085350916");
-		ImGui::SetWindowFontScale(1.0f);
-		
-		ImGui::End();
 	}
 
 	// ImGui::ShowDemoWindow();
@@ -586,17 +520,8 @@ bool MyImGui::OnFrame()
 	// Rendering
 	ImGui::Render();
 	
-	// Set background color based on mode
-	ImVec4 ClearColor;
-	if (MyMenu::bFusionMode) {
-		// Pure black background in fusion mode
-		ClearColor = ImVec4(0.0f, 0.0f, 0.0f, 1.0f);
-	} else {
-		// Transparent background to show the background image
-		ClearColor = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
-	}
-	
-	const float clear_color_with_alpha[4] = { ClearColor.x, ClearColor.y, ClearColor.z, ClearColor.w };
+	// The overlay owns a black DirectX layer; it never modifies the desktop wallpaper.
+	const float clear_color_with_alpha[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
 	g_pd3dDeviceContext->OMSetRenderTargets(1, &g_mainRenderTargetView, nullptr);
 	g_pd3dDeviceContext->ClearRenderTargetView(g_mainRenderTargetView, clear_color_with_alpha);
 	ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());

@@ -1,5 +1,8 @@
 #include "pch.h"
 #include "MenuManager.h"
+#include "AppRuntime.h"
+#include "ConsoleShell.h"
+#include "ConsoleTheme.h"
 #include "MyMenu.h"
 #include "Dev.h"
 #include "InputManager.h"
@@ -387,370 +390,7 @@ void MenuManager::GoBack()
 
 void MenuManager::RenderCurrentPage()
 {
-    // 初始化功能组件（只在首次调用时初始化）
-    static bool initialized = false;
-    if (!initialized) {
-        InitializeFunctionWidgets();
-        initialized = true;
-    }
-    
-    ImGui::SetNextWindowSize(ImVec2(1000, 700), ImGuiCond_FirstUseEver);
-    ImGui::Begin("FMC GTA5 DMA ", nullptr, ImGuiWindowFlags_NoCollapse);
-    
-    // 使用SUBSTANCE风格的红色主题
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
-    
-    // 设置主题颜色 - 使用半透明颜色实现毛玻璃效果
-    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.20f, 0.20f, 0.20f, 0.60f));
-    ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.25f, 0.25f, 0.25f, 0.65f));
-    ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.3f, 0.3f, 0.3f, 1.0f));
-    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
-    ImGui::PushStyleColor(ImGuiCol_TextDisabled, ImVec4(0.6f, 0.6f, 0.6f, 1.0f));
-    
-    // 左侧功能组件列表
-    float leftSectionWidth = 220.0f;
-    ImGui::BeginChild("LeftSection", ImVec2(leftSectionWidth, 0), true, ImGuiWindowFlags_NoScrollbar);
-    
-    float topMargin = 10.0f;
-    float bottomMargin = 10.0f;
-    
-    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + topMargin);
-    
-    // 渲染功能组件
-    for (auto& widget : g_FunctionWidgets) {
-        // 确保融合器模式菜单的状态与MyMenu::bFusionMode保持同步
-        if (widget.ID == "func.fusion_mode") {
-            widget.Checked = MyMenu::bFusionMode;
-        }
-        // 保持半透明背景颜色，实现毛玻璃效果
-        if (widget.Animating) {
-            widget.BorderOffset += 1.0f;
-            widget.Animating = !(widget.BorderOffset >= 1.0f);
-        }
-        if (widget.Render()) {
-            // 处理组件点击事件
-            if (widget.ID == "func.fusion_mode") {
-                MyMenu::bFusionMode = widget.Checked;
-            }
-            else if (widget.ID == "func.teleport") {
-                Teleport::bEnable = widget.Checked;
-            }
-            else if (widget.ID == "func.time_control") {
-                TimeControl::bEnableUI = widget.Checked;
-            }
-            else if (widget.ID == "func.heist_dividend") {
-                HeistDividend::bEnableUI = widget.Checked;
-                HeistDividend::bEnable.store(widget.Checked);
-            }
-            else if (widget.ID == "func.weapon") {
-                // 武器菜单不需要特殊状态管理
-            }
-            
-            // 确保只有一个组件为Checked状态（互斥），传送菜单和融合器模式除外
-            if (widget.Checked && widget.ID != "func.teleport" && widget.ID != "func.fusion_mode") {
-                for (auto& otherWidget : g_FunctionWidgets) {
-                    if (otherWidget.ID != widget.ID && otherWidget.Checked && otherWidget.ID != "func.teleport" && otherWidget.ID != "func.fusion_mode") {
-                        otherWidget.Checked = false;
-                        // 同时更新其他组件对应的功能状态
-                        if (otherWidget.ID == "func.time_control") {
-                            TimeControl::bEnableUI = false;
-                        }
-                        else if (otherWidget.ID == "func.heist_dividend") {
-                            HeistDividend::bEnableUI = false;
-                            HeistDividend::bEnable.store(false);
-                        }
-                        else if (otherWidget.ID == "func.weapon") {
-                            // 武器菜单不需要特殊状态管理
-                        }
-                    }
-                }
-            }
-            else if (widget.ID == "func.fusion_mode") {
-                // 融合器模式不受相互排斥影响，确保其状态与MyMenu::bFusionMode同步
-                widget.Checked = MyMenu::bFusionMode;
-            }
-        }
-    }
-    
-    // 添加大红色退出按钮（居中显示）
-    ImGui::Spacing();
-    ImGui::Spacing();
-    
-    // 计算按钮居中位置
-    float buttonWidth = 180.0f;
-    float offsetX = (leftSectionWidth - buttonWidth) * 0.5f;
-    
-    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + offsetX);
-    
-    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.2f, 0.2f, 1.0f));
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.9f, 0.3f, 0.3f, 1.0f));
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.7f, 0.1f, 0.1f, 1.0f));
-    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
-    if (ImGui::Button("退出", ImVec2(buttonWidth, 40))) {
-        // 退出程序
-        extern bool bAlive;
-        bAlive = false;
-    }
-    ImGui::PopStyleColor(4);
-    
-    ImGui::Dummy(ImVec2(0, bottomMargin));
-    
-    ImGui::EndChild();
-    
-    ImGui::SameLine();
-    
-    // 右侧详细设置面板
-    ImGui::BeginChild("RightSection", ImVec2(0, 0), true);
-    
-    float marginX = 15.0f;
-    float marginY = 10.0f;
-    
-    ImVec2 childStartPos = ImGui::GetCursorPos();
-    ImGui::SetCursorPos(ImVec2(0, childStartPos.y + marginY));
-    
-    // 顶部标题栏
-    float headerHeight = 40.0f;
-    ImGui::BeginChild("HeaderBar", ImVec2(0, headerHeight), false, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoBackground);
-    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.3f, 0.3f, 1.0f));
-    ImGui::Text("FMC GTA5 DMA ~ SUBSTANCE UI");
-    ImGui::PopStyleColor();
-    ImGui::EndChild();
-    
-    // 详细设置区域
-    ImGui::BeginChild("SettingsArea", ImVec2(0, 0), true);
-    
-    // 根据选中的功能组件显示对应的设置（传送菜单除外）
-    bool functionSelected = false;
-    
-    // 优先显示其他功能菜单的内容
-    for (const auto& widget : g_FunctionWidgets) {
-        if (widget.Checked && widget.ID != "func.teleport") {
-            // 跳过融合器模式和退出按钮，先检查其他功能
-            if (widget.ID != "func.fusion_mode" && widget.ID != "func.exit") {
-                if (widget.ID == "func.common_functions") {
-                    ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "常用功能设置");
-                    ImGui::Spacing();
-                    
-                    // 玩家无敌
-                    bool playerGodMode = GodMode::bPlayerGodMode.load();
-                    if (ImGui::Checkbox("玩家无敌", &playerGodMode)) {
-                        GodMode::bPlayerGodMode.store(playerGodMode);
-                        GodMode::bRequestedGodmode.store(true);
-                    }
-                    ImGui::Spacing();
-                    
-                    // 载具无敌
-                    bool vehicleGodMode = GodMode::bVehicleGodMode.load();
-                    if (ImGui::Checkbox("载具无敌", &vehicleGodMode)) {
-                        GodMode::bVehicleGodMode.store(vehicleGodMode);
-                        GodMode::bRequestedGodmode.store(true);
-                    }
-                    ImGui::Spacing();
-                    
-                    // 永不被通缉
-                    if (ImGui::Checkbox("永不被通缉", &NoWanted::bEnable)) {
-                        // 状态已直接修改
-                    }
-                    ImGui::Spacing();
-                    
-                    // 隐身功能
-                    if (ImGui::Checkbox("隐身功能", &Invisibility::bInvisibilityUI)) {
-                        // 状态已直接修改
-                    }
-                    ImGui::Spacing();
-                    
-                    // 无碰撞体积
-                    if (ImGui::Checkbox("无碰撞体积", &NoCollision::bNoCollisionUI)) {
-                        // 状态已直接修改
-                    }
-                    ImGui::Spacing();
-                    
-                    // 速度控制
-                    if (ImGui::Checkbox("速度控制", &PlayerSpeed::bEnableUI)) {
-                        // 状态已直接修改
-                    }
-                    if (PlayerSpeed::bEnableUI) {
-                        ImGui::Indent();
-                        // 野兽模式复选框
-                        ImGui::Checkbox("野兽模式 (速度1.5)", &PlayerSpeed::bBeastModeUI);
-                        
-                        // 显示当前速度值
-                        ImGui::Text("当前速度: %.1f", PlayerSpeed::playerSpeedUI);
-                        
-                        // 如果未启用野兽模式，则显示滑块
-            if (!PlayerSpeed::bBeastModeUI) {
-                ImGui::SliderFloat("人物速度", &PlayerSpeed::playerSpeedUI, 1.0f, 10.0f, "%.2f");
-            }
-                        ImGui::Unindent();
-                    }
-                    ImGui::Spacing();
-                    
-                    // 自动刷新生命值
-                    if (ImGui::Checkbox("自动刷新生命值", &RefreshHealth::bEnable)) {
-                        // 状态已直接修改
-                    }
-                    ImGui::Spacing();
-                    
-                    // 无布娃娃效果 (已固定开启)
-                    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.0f, 1.0f, 0.0f, 1.0f));
-                    ImGui::Text("无布娃娃效果 (默认开启不关闭)");
-                    ImGui::PopStyleColor();
-                    ImGui::Spacing();
-                    
-                    // 显示当前防弹衣值
-                    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.8f, 0.8f, 0.8f, 1.0f));
-                    ImGui::Text("当前防弹衣: %.0f", ArmorManager::currentArmor);
-                    ImGui::PopStyleColor();
-                    
-                    // 锁定防弹衣
-                    if (ImGui::Checkbox("锁定防弹衣 (200)", &ArmorManager::bLockArmor)) {
-                        // 状态已直接修改
-                    }
-                    ImGui::Spacing();
-                    
-                    // 显示当前生命值
-                    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.8f, 0.8f, 0.8f, 1.0f));
-                    ImGui::Text("当前生命值: %.0f", HealthManager::currentHealth);
-                    ImGui::PopStyleColor();
-                    
-                    // 锁定生命值
-                    if (ImGui::Checkbox("锁定生命值 (200) - 假无敌", &HealthManager::bLockHealth)) {
-                        // 状态已直接修改
-                    }
-                    ImGui::Spacing();
-                }
-                else if (widget.ID == "func.vehicle_editor") {
-                    ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "载具编辑器");
-                    ImGui::Spacing();
-                    VehicleEditor::RenderContent();
-                }
-                else if (widget.ID == "func.time_control") {
-                    ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "时间控制设置");
-                    ImGui::Spacing();
-                    ImGui::SliderInt("天", &TimeControl::dayUI, 0, 30);
-                    ImGui::SliderInt("时", &TimeControl::hourUI, 0, 23);
-                    ImGui::SliderInt("分", &TimeControl::minuteUI, 0, 59);
-                    ImGui::SliderInt("秒", &TimeControl::secondUI, 0, 59);
-                }
-                else if (widget.ID == "func.heist_dividend") {
-                    ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "抢劫分红设置");
-                    ImGui::Spacing();
-                    RenderHeistDividendPageContent();
-                }
-                else if (widget.ID == "func.weapon") {
-                    ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "武器功能设置");
-                    ImGui::Spacing();
-                    WeaponInspector::RenderContent();
-                }
-                functionSelected = true;
-                break;
-            }
-        }
-    }
-    
-    // 如果没有选择其他功能，且融合器模式开启，则显示融合器模式设置
-    if (!functionSelected) {
-        for (const auto& widget : g_FunctionWidgets) {
-            if (widget.Checked && widget.ID == "func.fusion_mode") {
-                ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "融合器模式设置");
-                ImGui::Spacing();
-                ImGui::Text("融合模式已启用，将整合多种功能。");
-                ImGui::Spacing();
-                ImGui::Text("(DMAYA BY FMC)");
-                ImGui::Spacing();
-                ImGui::Separator();
-                ImGui::Spacing();
-                ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.8f, 1.0f), "融合模式特点：");
-                ImGui::BulletText("整合多种功能到统一界面");
-                ImGui::BulletText("优化的用户交互体验");
-                ImGui::BulletText("更高效的功能管理");
-                functionSelected = true;
-                break;
-            }
-        }
-    }
-    
-    // 如果没有选中任何功能，显示默认信息（传送菜单除外）
-    bool anyChecked = false;
-    for (const auto& widget : g_FunctionWidgets) {
-        if (widget.Checked && widget.ID != "func.teleport") {
-            anyChecked = true;
-            break;
-        }
-    }
-    
-    if (!anyChecked) {
-        // 增大字体显示欢迎信息
-        ImGui::PushFont(ImGui::GetIO().FontDefault);
-        ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "欢迎使用 FMC GTA5 DMA");
-        ImGui::PopFont();
-        
-        ImGui::Spacing();
-        ImGui::Text("请从左侧选择要使用的功能。");
-        ImGui::Spacing();
-        ImGui::Text("功能列表：");
-        ImGui::BulletText("玩家无敌 - 使角色不受伤害");
-        ImGui::BulletText("载具无敌 - 使车辆不受伤害");
-        ImGui::BulletText("永不被通缉 - 保持通缉等级为零");
-        ImGui::BulletText("隐身功能 - 对其他玩家不可见");
-        ImGui::BulletText("无碰撞体积 - 穿过物体和玩家");
-        ImGui::BulletText("速度控制 - 调整移动速度");
-        ImGui::BulletText("传送功能 - 快速移动到指定位置");
-        ImGui::BulletText("载具编辑器 - 修改载具属性");
-        ImGui::BulletText("时间控制 - 调整游戏内时间");
-        ImGui::BulletText("抢劫分红 - 修改任务分红比例");
-        ImGui::Spacing();
-        ImGui::Separator();
-        ImGui::Spacing();
-        
-        // 每日一言
-        ImGui::TextColored(ImVec4(0.0f, 1.0f, 1.0f, 1.0f), "📅 每日一言");
-        static std::string dailyQuote = "正在获取每日一言...";
-        static bool quoteLoaded = false;
-        
-        if (!quoteLoaded) {
-            // 本地随机一言列表
-            std::vector<std::string> localQuotes = {
-                "人生得意须尽欢，莫使金樽空对月。",
-                "天生我材必有用，千金散尽还复来。",
-                "长风破浪会有时，直挂云帆济沧海。",
-                "山重水复疑无路，柳暗花明又一村。",
-                "纸上得来终觉浅，绝知此事要躬行。",
-                "问渠那得清如许？为有源头活水来。",
-                "落红不是无情物，化作春泥更护花。",
-                "春蚕到死丝方尽，蜡炬成灰泪始干。",
-                "海内存知己，天涯若比邻。",
-                "但愿人长久，千里共婵娟。"
-            };
-            
-            // 随机选择本地一言
-            srand(static_cast<unsigned int>(time(nullptr)));
-            int randomIndex = rand() % localQuotes.size();
-            dailyQuote = localQuotes[randomIndex];
-            quoteLoaded = true;
-        }
-        
-        ImGui::TextColored(ImVec4(1.0f, 1.0f, 1.0f, 1.0f), "%s", dailyQuote.c_str());
-        ImGui::Spacing();
-        
-        ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f), "📢 公告");
-        ImGui::BulletText("辅机雷达机HOME显示隐藏菜单");
-        ImGui::BulletText("此版本支持传承和增强");
-        ImGui::BulletText("传承凑合用");
-        ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "版本号：2.78");
-        ImGui::TextColored(ImVec4(0.0f, 1.0f, 1.0f, 1.0f), "编译时间：%s", GetChineseCompileTime().c_str());
-        ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.0f, 1.0f), "群: 1085350916");
-    }
-    
-    ImGui::EndChild();
-    
-    ImGui::EndChild();
-    
-    // 清理样式
-    ImGui::PopStyleColor(5);
-    ImGui::PopStyleVar();
-    
-    ImGui::End();
+    ConsoleShell::Render(*this);
 }
 
 void MenuManager::ApplyPageStyle()
@@ -822,8 +462,7 @@ void MenuManager::RenderMainMenuContent()
     ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.70f, 0.10f, 0.10f, 1.0f));
     
     if (ImGui::Button("🚪 退出程序", ImVec2(ImGui::GetContentRegionAvail().x, 0))) {
-        extern bool bAlive;
-        bAlive = false;
+        AppRuntime::RequestStop();
     }
     
     ImGui::PopStyleColor(3);
@@ -839,135 +478,74 @@ void MenuManager::RenderMainMenu()
 
 void MenuManager::RenderPlayerPageContent()
 {
-    // 标题
-    RenderPageTitle("玩家功能");
-    
-    ImGui::Separator();
-    
-    // 核心生存功能
-    ImGui::TextColored(ImVec4(0.26f, 0.59f, 0.98f, 1.0f), "核心生存功能");
-    ImGui::Spacing();
-    
-    // 玩家无敌
+    if (ImGui::BeginTable("##player_metrics", 2, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingStretchProp)) {
+        ImGui::TableNextColumn();
+        ImGui::TextDisabled("生命值");
+        ImGui::SameLine();
+        ImGui::Text("%.0f", HealthManager::currentHealth);
+        ImGui::TableNextColumn();
+        ImGui::TextDisabled("防弹衣");
+        ImGui::SameLine();
+        ImGui::Text("%.0f", ArmorManager::currentArmor);
+        ImGui::EndTable();
+    }
+    ImGui::Dummy(ImVec2(0.0f, 8.0f));
+
+    ConsoleTheme::SectionHeader("生存能力", "持续状态保护");
+
     bool playerGodMode = GodMode::bPlayerGodMode.load();
-    bool prevPlayerGodMode = playerGodMode;
-    ImGui::Checkbox("玩家无敌", &playerGodMode);
-    if (playerGodMode != prevPlayerGodMode) {
+    if (ConsoleTheme::ToggleRow("player_god", "玩家无敌", "保护人物生命与伤害状态", &playerGodMode)) {
         GodMode::bPlayerGodMode.store(playerGodMode);
         GodMode::bRequestedGodmode.store(true);
     }
-    
-    // 视觉反馈
-    if (playerGodMode) {
-        ImGui::SameLine();
-        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.0f, 1.0f, 0.0f, 1.0f));
-        ImGui::Text("[已开启]");
-        ImGui::PopStyleColor();
-    }
-    
-    // 载具无敌
+
     bool vehicleGodMode = GodMode::bVehicleGodMode.load();
-    bool prevVehicleGodMode = vehicleGodMode;
-    ImGui::Checkbox("载具无敌", &vehicleGodMode);
-    if (vehicleGodMode != prevVehicleGodMode) {
+    if (ConsoleTheme::ToggleRow("vehicle_god", "载具无敌", "进入载具时持续保护当前载具", &vehicleGodMode)) {
         GodMode::bVehicleGodMode.store(vehicleGodMode);
         GodMode::bRequestedGodmode.store(true);
     }
-    
-    // 视觉反馈
-    if (vehicleGodMode) {
-        ImGui::SameLine();
-        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.0f, 1.0f, 0.0f, 1.0f));
-        ImGui::Text("[已开启]");
-        ImGui::PopStyleColor();
-    }
-    
-    // 永不被通缉
-    ImGui::Checkbox("永不被通缉", &NoWanted::bEnable);
-    
-    // 自动刷新生命值
-    ImGui::Checkbox("自动刷新生命值", &RefreshHealth::bEnable);
+
+    ConsoleTheme::ToggleRow("no_wanted", "永不被通缉", "阻止通缉等级持续增加", &NoWanted::bEnable);
+    ConsoleTheme::ToggleRow("refresh_health", "自动刷新生命值", "生命值低于阈值时自动恢复", &RefreshHealth::bEnable);
     if (RefreshHealth::bEnable) {
-        ImGui::Indent();
-        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.6f, 0.6f, 0.6f, 1.0f));
-        ImGui::Text("阈值: %.0f%% (低于此值时自动恢复)", RefreshHealth::HealThresholdPercent * 100.0f);
-        ImGui::PopStyleColor();
-        ImGui::Unindent();
+        ImGui::TextDisabled("    当前恢复阈值 %.0f%%", RefreshHealth::HealThresholdPercent * 100.0f);
     }
-    
-    ImGui::Separator();
-    
-    // 高级功能
-    ImGui::TextColored(ImVec4(0.26f, 0.59f, 0.98f, 1.0f), "高级功能");
-    ImGui::Spacing();
-    
-    // 隐身功能
-    ImGui::Checkbox("启用隐身", &Invisibility::bInvisibilityUI);
-    if (Invisibility::bInvisibilityUI) {
-        ImGui::SameLine();
-        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.0f, 1.0f, 0.0f, 1.0f));
-        ImGui::Text("[已开启]");
-        ImGui::PopStyleColor();
+
+    ImGui::Dummy(ImVec2(0.0f, 10.0f));
+    ConsoleTheme::SectionHeader("移动与外观", "人物表现与移动参数");
+
+    bool invisible = Invisibility::bInvisibility.load();
+    if (ConsoleTheme::ToggleRow("invisibility", "启用隐身", "切换本地人物可见状态", &invisible)) {
+        Invisibility::bInvisibility.store(invisible);
     }
-    
-    // 无碰撞体积
-    ImGui::Checkbox("无碰撞体积", &NoCollision::bNoCollisionUI);
-    if (NoCollision::bNoCollisionUI) {
-        ImGui::SameLine();
-        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.0f, 1.0f, 0.0f, 1.0f));
-        ImGui::Text("[已开启]");
-        ImGui::PopStyleColor();
-    }
-    
-    // 玩家速度控制
-    ImGui::Checkbox("启用速度控制", &PlayerSpeed::bEnableUI);
+
+    ConsoleTheme::ToggleRow("no_collision", "无碰撞体积", "允许人物穿过常规碰撞体", &NoCollision::bNoCollisionUI);
+    ConsoleTheme::ToggleRow("speed_control", "启用速度控制", "调整步行、奔跑与游泳速度", &PlayerSpeed::bEnableUI);
     if (PlayerSpeed::bEnableUI) {
         ImGui::Indent();
-        // 野兽模式复选框
         ImGui::Checkbox("野兽模式 (速度1.5)", &PlayerSpeed::bBeastModeUI);
-        
-        // 显示当前速度值
-        ImGui::Text("当前速度: %.1f", PlayerSpeed::playerSpeedUI);
-        
-        // 如果未启用野兽模式，则显示滑块
         if (!PlayerSpeed::bBeastModeUI) {
             ImGui::SliderFloat("人物速度", &PlayerSpeed::playerSpeedUI, 1.0f, 10.0f, "%.2f");
         }
         ImGui::Unindent();
     }
-    
-    // 无布娃娃效果 (已固定开启)
-    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.0f, 1.0f, 0.0f, 1.0f));
-    ImGui::Text("无布娃娃效果 (已固定开启)");
-    ImGui::PopStyleColor();
-    
-    ImGui::Separator();
-    
-    // 状态管理
-    ImGui::TextColored(ImVec4(0.26f, 0.59f, 0.98f, 1.0f), "状态管理");
-    ImGui::Spacing();
-    
-    // 防弹衣管理
-    // 显示当前防弹衣值
-    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.80f, 0.80f, 0.80f, 1.0f));
-    ImGui::Text("当前防弹衣: %.0f", ArmorManager::currentArmor);
-    ImGui::PopStyleColor();
-    
-    // 锁定防弹衣开关
+
+    ImGui::TextColored(ImVec4(0.31f, 0.78f, 0.56f, 1.0f), "● 无布娃娃已固定启用");
+
+    ImGui::Dummy(ImVec2(0.0f, 10.0f));
+    ConsoleTheme::SectionHeader("状态锁定", "固定人物基础数值");
+
+    char armorDescription[64] = {};
+    std::snprintf(armorDescription, sizeof(armorDescription), "当前防弹衣 %.0f，目标值 200", ArmorManager::currentArmor);
     bool lockArmor = ArmorManager::bLockArmor;
-    if (ImGui::Checkbox("锁定防弹衣 (200)", &lockArmor)) {
+    if (ConsoleTheme::ToggleRow("lock_armor", "锁定防弹衣", armorDescription, &lockArmor)) {
         ArmorManager::bLockArmor = lockArmor;
     }
-    
-    // 生命值管理
-    // 显示当前生命值
-    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.80f, 0.80f, 0.80f, 1.0f));
-    ImGui::Text("当前生命值: %.0f", HealthManager::currentHealth);
-    ImGui::PopStyleColor();
-    
-    // 锁定生命值开关
+
+    char healthDescription[72] = {};
+    std::snprintf(healthDescription, sizeof(healthDescription), "当前生命值 %.0f，目标值 200（假无敌）", HealthManager::currentHealth);
     bool lockHealth = HealthManager::bLockHealth;
-    if (ImGui::Checkbox("锁定生命值 (200) - 假无敌", &lockHealth)) {
+    if (ConsoleTheme::ToggleRow("lock_health", "锁定生命值", healthDescription, &lockHealth)) {
         HealthManager::bLockHealth = lockHealth;
     }
 }
@@ -983,12 +561,6 @@ void MenuManager::RenderPlayerPage()
 
 void MenuManager::RenderWeaponPageContent()
 {
-    // 标题
-    RenderPageTitle("武器功能");
-    
-    ImGui::Separator();
-    
-    // 武器检查器
     WeaponInspector::RenderContent();
 }
 
@@ -1003,13 +575,13 @@ void MenuManager::RenderWeaponPage()
 
 void MenuManager::RenderTeleportPageContent()
 {
-    // 标题
-    RenderPageTitle("传送功能");
-    
-    ImGui::Separator();
-    
-    // 传送功能
-    ImGui::Checkbox("启用传送", &Teleport::bEnable);
+    ConsoleTheme::SectionHeader("传送控制", "F5 标记点 / F6 任务点");
+    ConsoleTheme::ToggleRow("teleport_enable", "启用传送工具", "显示坐标编辑与预设位置", &Teleport::bEnable);
+
+    if (Teleport::bEnable) {
+        ImGui::Dummy(ImVec2(0.0f, 8.0f));
+        Teleport::RenderContent();
+    }
 }
 
 void MenuManager::RenderTeleportPage()
@@ -1023,12 +595,6 @@ void MenuManager::RenderTeleportPage()
 
 void MenuManager::RenderVehiclePageContent()
 {
-    // 标题
-    RenderPageTitle("载具功能");
-    
-    ImGui::Separator();
-    
-    // 载具编辑器
     VehicleEditor::RenderContent();
 }
 
@@ -1694,26 +1260,15 @@ void MenuManager::RenderHeistDividendPage()
 
 
 void MenuManager::RenderSettingsPageContent() {
-    // 标题
-    RenderPageTitle("设置");
-    
-    ImGui::Separator();
-    
-    // 主题设置
-    ImGui::TextColored(ImVec4(0.26f, 0.59f, 0.98f, 1.0f), "主题设置");
-    ImGui::Spacing();
-    
-    // 主题选择器
+    ConsoleTheme::SectionHeader("界面主题", "选择显示风格");
     ImGuiToolStyle::RenderThemeSelector();
+
+    ImGui::Dummy(ImVec2(0.0f, 10.0f));
+    ConsoleTheme::SectionHeader("高级功能", "已停用功能保留源码");
+    ImGui::TextDisabled("当前没有可用的高级设置");
     
-    ImGui::Separator();
-    
-    // 高级功能
-    ImGui::TextColored(ImVec4(0.26f, 0.59f, 0.98f, 1.0f), "高级功能");
-    ImGui::Spacing();
-    
-    // 追战局功能
-    ImGui::Checkbox("启用追战局", &PlayerChaser::bEnableUI);
+    // DISABLED: PlayerChaser implementation and state are retained for later restoration.
+    // ImGui::Checkbox("启用追战局", &PlayerChaser::bEnableUI);
 }
 
 void MenuManager::RenderSettingsPage()

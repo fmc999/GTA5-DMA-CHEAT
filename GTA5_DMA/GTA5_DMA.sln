@@ -1,16 +1,22 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio Version 17
-VisualStudioVersion = 17.13.35806.99
+# Visual Studio Version 18
+VisualStudioVersion = 18.7.11925.98 stable
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "GTA5_DMA", "GTA5_DMA\GTA5_DMA.vcxproj", "{BA1C7D88-A234-4414-BEC0-4FE4EC8DC746}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|x64 = Debug|x64
+		Debug|x86 = Debug|x86
 		Release|x64 = Release|x64
 		Release|x86 = Release|x86
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{BA1C7D88-A234-4414-BEC0-4FE4EC8DC746}.Debug|x64.ActiveCfg = Debug|x64
+		{BA1C7D88-A234-4414-BEC0-4FE4EC8DC746}.Debug|x64.Build.0 = Debug|x64
+		{BA1C7D88-A234-4414-BEC0-4FE4EC8DC746}.Debug|x86.ActiveCfg = Debug|x64
+		{BA1C7D88-A234-4414-BEC0-4FE4EC8DC746}.Debug|x86.Build.0 = Debug|x64
 		{BA1C7D88-A234-4414-BEC0-4FE4EC8DC746}.Release|x64.ActiveCfg = Release|x64
 		{BA1C7D88-A234-4414-BEC0-4FE4EC8DC746}.Release|x64.Build.0 = Release|x64
 		{BA1C7D88-A234-4414-BEC0-4FE4EC8DC746}.Release|x86.ActiveCfg = Release|x64

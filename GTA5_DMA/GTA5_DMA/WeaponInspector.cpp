@@ -1,15 +1,12 @@
 #include "pch.h"
 
+#include "ConsoleTheme.h"
 #include "WeaponInspector.h"
 
 #include "Offsets.h"
 
 bool WeaponInspector::RenderContent() {
-	// 标题
-	ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.26f, 0.59f, 0.98f, 1.0f));
-	ImGui::Text("武器属性检查与修改");
-	ImGui::PopStyleColor();
-	ImGui::Separator();
+    ConsoleTheme::SectionHeader("武器工作区", "当前武器属性与写入参数");
 
 	// 创建两列布局
 	ImGui::BeginTable("weapon_table", 2, ImGuiTableFlags_Resizable | ImGuiTableFlags_Borders);
@@ -439,7 +436,7 @@ bool WeaponInspector::OnDMAFrame()
 
 	// 禁用其他人武器逻辑 - 功能开启时持续执行
 	// 多级指针解引用：基址 -> 0x10B8 -> 0x20 -> +0x54
-	uintptr_t baseAddr = DMA::BaseAddress + 0x03EA5060;
+	uintptr_t baseAddr = DMA::BaseAddress + Offsets::AimCPedPtr;
 	uintptr_t level1Addr = 0;
 	uintptr_t level2Addr = 0;
 	uintptr_t level3Addr = 0;
@@ -502,11 +499,11 @@ bool WeaponInspector::OnDMAFrame()
 	bPrevApplyOneClickMod = bApplyOneClickMod;
 
 	// 修改其他人移动速度逻辑
-	// 从CT文件中获取的正确偏移：AimCPedPTR -> +0x5E4
+	// 从 CT 文件中获取的正确偏移：AimCPedPTR -> +0x5E4
 	if (bModifyOthersMoveSpeed)
 	{
-		// 读取AimCPedPTR: "GTA5_Enhanced.exe"+03EA5060
-		uintptr_t aimCPedBaseAddr = DMA::BaseAddress + 0x03EA5060;
+		// 读取 AimCPedPTR
+		uintptr_t aimCPedBaseAddr = DMA::BaseAddress + Offsets::AimCPedPtr;
 		uintptr_t aimCPedPtr = 0;
 		DWORD bytesRead = 0;
 		
@@ -521,10 +518,10 @@ bool WeaponInspector::OnDMAFrame()
 		}
 	}
 
-	// 将瞄准敌人血量修改为-1逻辑
+	// 将瞄准敌人血量修改为 -1 逻辑
 	if (bSetAimTargetHealthToMinusOne) {
-        // 读取AimCPedPTR: "GTA5_Enhanced.exe"+03EA5060
-        uintptr_t aimCPedBaseAddr = DMA::BaseAddress + 0x03EA5060;
+        // 读取 AimCPedPTR
+        uintptr_t aimCPedBaseAddr = DMA::BaseAddress + Offsets::AimCPedPtr;
         uintptr_t aimCPedPtr = 0;
         DWORD bytesRead = 0;
         
@@ -540,10 +537,10 @@ bool WeaponInspector::OnDMAFrame()
         }
     }
 
-	// 将瞄准敌人防弹衣修改为-1逻辑
+	// 将瞄准敌人防弹衣修改为 -1 逻辑
 	if (bSetAimTargetArmorToMinusOne) {
-        // 读取AimCPedPTR: "GTA5_Enhanced.exe"+03EA5060
-        uintptr_t aimCPedBaseAddr = DMA::BaseAddress + 0x03EA5060;
+        // 读取 AimCPedPTR
+        uintptr_t aimCPedBaseAddr = DMA::BaseAddress + Offsets::AimCPedPtr;
         uintptr_t aimCPedPtr = 0;
         DWORD bytesRead = 0;
         

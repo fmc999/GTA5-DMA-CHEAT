@@ -1,4 +1,5 @@
 #include "pch.h"
+#include "ConsoleTheme.h"
 #include "VehicleEditor.h"
 #include "DMA.h"
 #include "Reclass.h"
@@ -163,11 +164,7 @@ bool VehicleEditor::bNeedsOverwrite = false;
 bool VehicleEditor::bRequestedCopyToDesired = false;
 
 bool VehicleEditor::RenderContent() {
-    // 标题
-    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.26f, 0.59f, 0.98f, 1.0f));
-    ImGui::Text("载具属性编辑");
-    ImGui::PopStyleColor();
-    ImGui::Separator();
+    ConsoleTheme::SectionHeader("载具工作区", "属性、附加能力与操控数据");
 
     // 使用标签页组织功能模块
     if (ImGui::BeginTabBar("VehicleTabs", ImGuiTabBarFlags_None)) {

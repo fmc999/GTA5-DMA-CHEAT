@@ -4,7 +4,10 @@ class Teleport
 {
 public:
 	static bool Render();
+	static bool RenderContent();
 	static bool OnDMAFrame();
+	static bool RequestWaypointTeleport();
+	static bool RequestObjectiveTeleport();
 
 public:
 	static inline bool bEnable = false;
@@ -14,6 +17,7 @@ public:
 
 private:
 	static Vec3 GetWaypointCoords();
+	static Vec3 GetObjectiveCoords();
 	
 	static bool UpdatePlayerStartingLocation();
 	static void OverwriteLocation(Vec3 Location);

@@ -12,7 +12,4 @@ public:
 
     static Mode SelectMode();
     static void RunMode(Mode mode);
-    
-private:
-    static void RunDMAThread();
 };

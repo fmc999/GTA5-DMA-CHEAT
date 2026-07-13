@@ -1,5 +1,6 @@
 #include "pch.h"
 
+#include "ConsoleTheme.h"
 #include "Teleport.h"
 
 #include "Locations.h"
@@ -201,11 +202,16 @@ bool Teleport::Render()
     ImGui::PopStyleColor(3);
     ImGui::PopStyleVar(6);
 
-    // 标题
-    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.26f, 0.59f, 0.98f, 1.0f));
-    ImGui::Text("位置传送工具");
-    ImGui::PopStyleColor();
-    ImGui::Separator();
+    RenderContent();
+
+    ImGui::End();
+
+    return true;
+}
+
+bool Teleport::RenderContent()
+{
+    ConsoleTheme::SectionHeader("坐标工作区", "编辑目标坐标或选择预设位置");
 
     // 当前位置
     ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.90f, 0.90f, 0.90f, 1.0f));
@@ -260,15 +266,11 @@ bool Teleport::Render()
         bRequestedTeleport = true;
     }
 
-    if (ImGui::Button("传送到标记点"))
-    {
-        Vec3 WaypointCoords = GetWaypointCoords();
-        if (WaypointCoords.x != 0.0f)
-        {
-            DesiredLocation = WaypointCoords;
-            bRequestedTeleport = true;
-        }
-    }
+    if (ImGui::Button("传送到标记点 (F5)"))
+        RequestWaypointTeleport();
+    ImGui::SameLine();
+    if (ImGui::Button("传送到任务点 (F6)"))
+        RequestObjectiveTeleport();
 
     if (ImGui::CollapsingHeader("通用传送点"))
     {
@@ -437,9 +439,32 @@ bool Teleport::Render()
     }
 
 
-    ImGui::End();
+    return true;
+}
 
-    return 1;
+bool Teleport::RequestWaypointTeleport()
+{
+    const Vec3 waypointCoords = GetWaypointCoords();
+    if (waypointCoords.x == 0.0f && waypointCoords.y == 0.0f)
+        return false;
+
+    DesiredLocation = waypointCoords;
+    bRequestedTeleport = true;
+    return true;
+}
+
+bool Teleport::RequestObjectiveTeleport()
+{
+    if (currentGameType != GameType::GTA5_Enhanced)
+        return false;
+
+    const Vec3 objectiveCoords = GetObjectiveCoords();
+    if (objectiveCoords.x == 0.0f && objectiveCoords.y == 0.0f)
+        return false;
+
+    DesiredLocation = objectiveCoords;
+    bRequestedTeleport = true;
+    return true;
 }
 
 void Teleport::PreparePlayerWrites(VMMDLL_SCATTER_HANDLE vmsh)
@@ -613,3 +638,95 @@ Vec3 Teleport::GetWaypointCoords()
 	return WaypointCoordinates;
 }
 
+
+
+Vec3 Teleport::GetObjectiveCoords()
+{
+	Vec3 objectiveCoordinates = { 0.0f, 0.0f, 0.0f };
+	if (currentGameType != GameType::GTA5_Enhanced || DMA::BaseAddress == 0)
+		return objectiveCoordinates;
+
+	struct ObjectiveBlip
+	{
+		char pad_0000[16];
+		Vec3 Position;
+		char pad_001C[36];
+		int32_t ID;
+		char pad_0044[4];
+		uint8_t Color; // GTA5 Enhanced Blip color at offset 0x48.
+	};
+	static_assert(offsetof(ObjectiveBlip, Color) == 0x48);
+
+	struct ObjectiveType
+	{
+		const int* IDs;
+		size_t IDCount;
+		const uint8_t* Colors;
+		size_t ColorCount;
+	};
+
+	static const int primaryIDs[] = { 1 };
+	static const uint8_t primaryColors[] = { 5, 60, 66 };
+	static const int missionIDs[] = { 1, 225, 427, 478, 501, 523, 556 };
+	static const uint8_t missionColors[] = { 1, 2, 3, 54, 78 };
+	static const int specialIDs[] = { 432, 443 };
+	static const uint8_t specialColors[] = { 59 };
+	static const ObjectiveType objectiveTypes[] = {
+		{ primaryIDs, _countof(primaryIDs), primaryColors, _countof(primaryColors) },
+		{ missionIDs, _countof(missionIDs), missionColors, _countof(missionColors) },
+		{ specialIDs, _countof(specialIDs), specialColors, _countof(specialColors) }
+	};
+
+	uintptr_t blipAddresses[BLIP_NUM] = { 0 };
+	DWORD bytesRead = 0;
+	const uintptr_t blipsArrayAddress = DMA::BaseAddress + Offsets::BlipPtr;
+	if (!VMMDLL_MemReadEx(DMA::vmh, DMA::PID, blipsArrayAddress, reinterpret_cast<BYTE*>(blipAddresses), sizeof(blipAddresses), &bytesRead, VMMDLL_FLAG_NOCACHE))
+		return objectiveCoordinates;
+
+	int validBlipCount = static_cast<int>(bytesRead / sizeof(uintptr_t));
+	if (validBlipCount > BLIP_NUM)
+		validBlipCount = BLIP_NUM;
+
+	auto blips = std::make_unique<ObjectiveBlip[]>(validBlipCount);
+	ZeroMemory(blips.get(), sizeof(ObjectiveBlip) * validBlipCount);
+	VMMDLL_SCATTER_HANDLE vmsh = VMMDLL_Scatter_Initialize(DMA::vmh, DMA::PID, VMMDLL_FLAG_NOCACHE);
+	if (!vmsh)
+		return objectiveCoordinates;
+
+	for (int index = 0; index < validBlipCount; ++index)
+	{
+		if (blipAddresses[index])
+			VMMDLL_Scatter_PrepareEx(vmsh, blipAddresses[index], sizeof(ObjectiveBlip), reinterpret_cast<BYTE*>(&blips[index]), nullptr);
+	}
+
+	if (!VMMDLL_Scatter_Execute(vmsh))
+	{
+		VMMDLL_Scatter_CloseHandle(vmsh);
+		return objectiveCoordinates;
+	}
+
+	for (const ObjectiveType& objectiveType : objectiveTypes)
+	{
+		for (int index = 0; index < validBlipCount; ++index)
+		{
+			const ObjectiveBlip& blip = blips[index];
+			bool idMatches = false;
+			bool colorMatches = false;
+			for (size_t idIndex = 0; idIndex < objectiveType.IDCount; ++idIndex)
+				idMatches = idMatches || blip.ID == objectiveType.IDs[idIndex];
+			for (size_t colorIndex = 0; colorIndex < objectiveType.ColorCount; ++colorIndex)
+				colorMatches = colorMatches || blip.Color == objectiveType.Colors[colorIndex];
+
+			if (idMatches && colorMatches && (blip.Position.x != 0.0f || blip.Position.y != 0.0f))
+			{
+				objectiveCoordinates = blip.Position;
+				objectiveCoordinates.z = objectiveCoordinates.z == 20.0f ? 50.0f : objectiveCoordinates.z + 1.0f;
+				VMMDLL_Scatter_CloseHandle(vmsh);
+				return objectiveCoordinates;
+			}
+		}
+	}
+
+	VMMDLL_Scatter_CloseHandle(vmsh);
+	return objectiveCoordinates;
+}

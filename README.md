@@ -1,156 +1,148 @@
-# GTA5 DMA Tool
+# GTA5 DMA Control Console
 
-一个基于 DMA（直接内存访问）技术的 GTA5 游戏修改工具，支持原版 GTA5 和 GTA5 Enhanced 版本。
+基于 C++、MemProcFS、Dear ImGui 和 DirectX 11 构建的 GTA5 DMA 控制工具，支持 `GTA5.exe` 与 `GTA5_Enhanced.exe`。
 
-## ⚠️ 免责声明
+> bilibili：一只小微凉鸭
+>
+> 本项目免费发布，请勿贩卖。
 
-**本项目仅供学习和研究使用。** 使用本工具可能违反游戏的服务条款，可能导致账号封禁。开发者不对使用本工具造成的任何后果负责。
+## 重要说明
 
-## 功能特性
+- 本项目仅用于技术研究、软件开发和 DMA 读写学习。
+- 使用者应自行确认并遵守所在地法律、游戏平台规则与游戏服务条款。
+- 游戏更新后，内存结构和偏移可能失效。错误偏移可能导致功能异常或目标进程崩溃。
+- 作者不对账号、硬件、数据或其他直接及间接损失负责。
 
-### 核心功能
-- ✅ **DMA 内存读写** - 使用 MemProcFS 进行安全的内存访问
-- ✅ **双版本支持** - 同时支持 GTA5.exe 和 GTA5_Enhanced.exe
-- ✅ **ImGui 图形界面** - 现代化的菜单界面
-- ✅ **多线程架构** - DMA 读写与界面渲染分离
+## 当前功能
 
-### 游戏功能
-- 🛡️ **God Mode（无敌模式）** - 角色无敌
-- ❤️ **Health Manager（生命管理）** - 生命和护甲控制
-- 👮 **No Wanted（无通缉）** - 清除/禁用通缉等级
-- 🚗 **Vehicle Editor（载具编辑器）** - 载具属性修改
-- ⏰ **Time Control（时间控制）** - 游戏时间管理
-- 🌪️ **Ragdoll（布娃娃）** -  ragdoll 效果控制
-- ⚡ **Player Speed（玩家速度）** - 移动速度修改
-- 👻 **Invisibility（隐身）** - 角色隐身
-- 🚫 **No Collision（无碰撞）** - 禁用碰撞检测
-- 🎯 **Player Chaser（玩家追踪）** - 追踪其他玩家
-- 💸 **Heist Dividend（抢劫分红）** - 抢劫任务分红修改
-- 🔫 **Weapon Inspector（武器检查器）** - 武器属性查看与修改
-- 📍 **Teleport（传送）** - 快速传送到指定位置
+### 人物控制
+
+- 玩家无敌与载具无敌
+- 永不通缉与自动生命恢复
+- 隐身与无碰撞
+- 人物速度控制
+- 生命值与防弹衣锁定
+
+### 载具编辑
+
+- 载具基础属性读取与修改
+- 引擎、车身、油箱和载具生命值管理
+- 附加能力、降落伞、喷气和跳跃参数
+- 导弹参数与操控数据编辑
+
+### 武器功能
+
+- 当前武器属性读取
+- 伤害、射速、射程、后坐力和冲击力修改
+- 无限弹药与无需装弹
+- 其他武器实验功能
+
+### 位置传送
+
+- 自定义坐标和预设位置传送
+- `F5` 传送到地图标记点
+- `F6` 传送到任务点（Enhanced）
+- 人物与载具状态自动处理
+
+### 界面与运行
+
+- 紧凑型 Dear ImGui 控制台
+- DMA 读写线程与界面线程分离
+- 自动识别 GTA5 原版和 Enhanced 进程
+- 主机及目标机热键检测
+
+时间控制、任务分红和追战局功能目前已从界面与 DMA 主循环停用，相关源码仍保留，便于后续维护。
 
 ## 环境要求
 
 ### 硬件
-- 支持 DMA 的硬件设备（如 PCIe 采集卡、FPGA 等）
-- 目标主机：Windows 系统，运行 GTA5
-- 控制主机：Windows 系统
 
-### 软件
-- Visual Studio 2022（用于编译）
-- MemProcFS 驱动和库
-- .NET Framework 4.8（如需要）
+- 可用的 DMA/FPGA 设备
+- 运行 GTA5 的目标 Windows 主机
+- 运行本工具的 Windows 控制主机
 
-### 依赖库
-- **MemProcFS** - DMA 内存访问库
-- **ImGui** - 图形用户界面库
-- **DirectX 11** - 渲染后端
+### 开发环境
 
-## 项目结构
+- Visual Studio 2022 或更高版本
+- Desktop development with C++ 工作负载
+- Windows SDK
+- x64 编译环境
 
-```
-GTA212312/
-├── GTA5_DMA/              # 主项目
-│   ├── GTA5_DMA/          # 源代码
-│   │   ├── DMA.h/cpp      # DMA 核心类
-│   │   ├── Offsets.h      # 游戏偏移量
-│   │   ├── Features.h     # 功能模块列表
-│   │   ├── main.cpp       # 程序入口
-│   │   └── ...            # 各功能模块
-│   ├── ImGui/             # ImGui 库
-│   ├── MemProcFS/         # MemProcFS 库
-│   └── x64/Release/       # 编译输出
-└── SUBSTANCE-main/        # 辅助项目
+仓库已经包含项目使用的 Dear ImGui 和 MemProcFS 头文件及库文件。
+
+## 构建
+
+1. 打开 `GTA5_DMA/GTA5_DMA.sln`。
+2. 将解决方案配置设为 `Release`。
+3. 将平台设为 `x64`。
+4. 执行“生成解决方案”。
+5. 输出文件位于 `GTA5_DMA/x64/Release/GTA5_DMA.exe`。
+
+命令行构建示例：
+
+```powershell
+MSBuild.exe GTA5_DMA\GTA5_DMA.sln /t:Build /p:Configuration=Release /p:Platform=x64
 ```
 
-## 编译说明
+## 使用
 
-1. 使用 Visual Studio 2022 打开 `GTA5_DMA.sln`
-2. 选择 Release / x64 配置
-3. 确保 MemProcFS 相关文件（vmm.dll、leechcore.dll 等）在正确位置
-4. 点击生成解决方案
-
-## 使用说明
-
-### 前置准备
-
-1. **确保 DMA 硬件正常工作**
-2. **在目标主机上启动 GTA5 游戏**
-3. **确保 MemProcFS 驱动已加载**
-
-### 运行步骤
-
-1. 先启动 GTA5 游戏
-2. 再运行 `GTA5_DMA.exe`
-3. 程序会自动检测游戏版本（GTA5.exe 或 GTA5_Enhanced.exe）
-4. 使用菜单启用/禁用各项功能
+1. 确认 DMA 设备和 MemProcFS 环境工作正常。
+2. 在目标主机启动 GTA5 或 GTA5 Enhanced。
+3. 在控制主机运行 `GTA5_DMA.exe`。
+4. 等待顶部状态显示 DMA 和游戏进程已连接。
+5. 通过左侧导航进入人物、载具、武器或传送页面。
 
 ### 快捷键
 
-- **END 键** - 退出程序
-- **菜单控制** - 通过 ImGui 界面操作
+| 按键 | 功能 |
+| --- | --- |
+| `Insert` | 显示或隐藏控制台 |
+| `End` | 退出程序 |
+| `F5` | 传送到地图标记点 |
+| `F6` | 传送到任务点（Enhanced） |
 
-## Offset 更新
+## 项目结构
 
-游戏版本更新后，需要更新 `Offsets.h` 中的偏移量：
-
-```cpp
-namespace Offsets
-{
-    // GTA5 Enhanced 版本
-    static const uintptr_t WorldPtr_Enhanced = 0x44061E8;
-    static const uintptr_t GlobalPtr_Enhanced = 0x47F2808;
-    static const uintptr_t BlipPtr_Enhanced = 0x3EA6460;
-    
-    // GTA5 原版
-    static const uintptr_t WorldPtr_Original = 0x2603908;
-    static const uintptr_t GlobalPtr_Original = 0x2FA8550;
-    static const uintptr_t BlipPtr_Original = 0x206D600;
-}
+```text
+GTA5_DMA/
+├── GTA5_DMA.sln          # Visual Studio 解决方案
+├── GTA5_DMA/             # 主程序源码和项目文件
+│   ├── DMA.*             # DMA 初始化与核心地址更新
+│   ├── Offsets.h         # GTA5 与 Enhanced 偏移
+│   ├── ConsoleShell.*    # 控制台整体布局
+│   ├── ConsoleTheme.*    # 控制台主题和通用控件
+│   ├── Teleport.*        # 传送功能
+│   ├── VehicleEditor.*   # 载具功能
+│   └── WeaponInspector.* # 武器功能
+├── ImGui/                # Dear ImGui 源码
+└── MemProcFS/            # MemProcFS 接口与依赖
 ```
 
-可以使用 Cheat Engine 或提供的 .CT 表格来查找新的偏移量。
+## 偏移维护
 
-## 技术细节
+游戏版本更新后，优先检查：
 
-### DMA 架构
+- `WorldPtr`
+- `GlobalPtr`
+- `BlipPtr`
+- `PlayerMgrPtr`
+- 人物、载具和武器结构字段
 
-```
-控制主机                    目标主机
-┌─────────────┐            ┌─────────────┐
-│ GTA5_DMA.exe│◄───DMA────►│   GTA5.exe  │
-│             │  内存读写   │             │
-└─────────────┘            └─────────────┘
-```
+修改 `Offsets.h` 或结构定义后，应先验证只读数据，再启用写入功能。不要在未验证地址的情况下持续写入内存。
 
-### 核心类
+## 发布说明
 
-- **DMA** - 内存读写核心类
-- **MyImGui** - 界面管理类
-- **各功能模块** - GodMode、NoWanted 等
-
-## 常见问题
-
-### Q: 程序无法找到游戏？
-A: 确保先启动 GTA5 游戏，再运行本程序。
-
-### Q: 功能不生效？
-A: 检查偏移量是否与当前游戏版本匹配。
-
-### Q: 如何更新偏移量？
-A: 使用 Cheat Engine 扫描或参考社区提供的最新偏移量。
-
-## 许可证
-
-本项目仅供学习交流使用。
+- 不提交 `.vs`、`x64`、PDB、OBJ、TLOG 等本地生成文件。
+- 仓库中的 CT 文件用于偏移研究和版本对照。
+- 发布版本应先完成 x64 Release 构建和基础功能检查。
 
 ## 致谢
 
-- MemProcFS 项目
-- ImGui 项目
-- GTA5 逆向工程社区
+- [MemProcFS](https://github.com/ufrisk/MemProcFS)
+- [Dear ImGui](https://github.com/ocornut/imgui)
 
----
+## 许可与声明
 
-**版本**: 1.72  
-**更新日期**: 2025.12.16
+具体许可条款见仓库中的 `LICENSE` 文件。
+
+**免费发布，请勿贩卖。**

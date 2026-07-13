@@ -5,45 +5,25 @@
 
 void Invisibility::OnDMAFrame()
 {
-	// Sync UI values to atomic values
-	SyncUI();
-	
-	// Always update invisibility state based on UI setting
 	UpdateInvisibility();
 }
 
 void Invisibility::UpdateInvisibility()
 {
-	// Invisibility effect: "GTA5_Enhanced.exe"+043DBC98 -> [8, 2C]
-	// This is a multi-level pointer that needs to be resolved
-	
-	// First, get the base address from WorldPtr
-	uintptr_t worldAddress = 0;
-	DWORD bytesRead = 0;
-	
-	// Read the world pointer
-	uintptr_t worldPtr = DMA::BaseAddress + Offsets::WorldPtr;
-	VMMDLL_MemReadEx(DMA::vmh, DMA::PID, worldPtr, (BYTE*)&worldAddress, sizeof(uintptr_t), &bytesRead, VMMDLL_FLAG_NOCACHE);
-	
-	if (bytesRead != sizeof(uintptr_t) || !worldAddress) {
+	if (!DMA::vmh || !DMA::PID || !DMA::LocalPlayerAddress) {
 		return;
 	}
-	
-	// Now read the player address (offset 0x8)
-	uintptr_t playerAddress = 0;
-	VMMDLL_MemReadEx(DMA::vmh, DMA::PID, worldAddress + 0x8, (BYTE*)&playerAddress, sizeof(uintptr_t), &bytesRead, VMMDLL_FLAG_NOCACHE);
-	
-	if (bytesRead != sizeof(uintptr_t) || !playerAddress) {
-		return;
-	}
-	
-	// Modify value: 47 = normal, 1 = invisible
-	BYTE invisibilityValue = bInvisibility.load() ? 1 : 47;
-	VMMDLL_MemWrite(DMA::vmh, DMA::PID, playerAddress + 0x2C, (BYTE*)&invisibilityValue, sizeof(BYTE));
-}
 
-void Invisibility::SyncUI()
-{
-	// Sync from UI to atomic values
-	bInvisibility.store(bInvisibilityUI);
+	const uintptr_t invisibilityAddress = DMA::LocalPlayerAddress + offsetof(PED, InvisibilityFlag);
+	BYTE desiredValue = bInvisibility.load() ? 0x01 : 0x27;
+	BYTE currentValue = 0;
+	DWORD bytesRead = 0;
+	if (!VMMDLL_MemReadEx(DMA::vmh, DMA::PID, invisibilityAddress, &currentValue, sizeof(currentValue), &bytesRead, VMMDLL_FLAG_NOCACHE) ||
+		bytesRead != sizeof(currentValue)) {
+		return;
+	}
+
+	if (currentValue != desiredValue) {
+		VMMDLL_MemWrite(DMA::vmh, DMA::PID, invisibilityAddress, &desiredValue, sizeof(desiredValue));
+	}
 }
