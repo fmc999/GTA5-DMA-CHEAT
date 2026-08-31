@@ -196,16 +196,18 @@ void MenuManager::RenderSessionPageContent()
         ImGuiTableFlags_ScrollY | ImGuiTableFlags_SizingStretchProp;
 
     const float tableHeight = ImGui::GetContentRegionAvail().y - 130.0f;
-    if (ImGui::BeginTable("##session_players", 7, flags, ImVec2(0.0f, tableHeight)))
+    if (ImGui::BeginTable("##session_players", 9, flags, ImVec2(0.0f, tableHeight)))
     {
         ImGui::TableSetupScrollFreeze(0, 1);
-        ImGui::TableSetupColumn("序号", ImGuiTableColumnFlags_WidthFixed, 46.0f);
-        ImGui::TableSetupColumn("名称", ImGuiTableColumnFlags_WidthFixed, 150.0f);
-        ImGui::TableSetupColumn("血量", ImGuiTableColumnFlags_WidthFixed, 70.0f);
-        ImGui::TableSetupColumn("护甲", ImGuiTableColumnFlags_WidthFixed, 70.0f);
-        ImGui::TableSetupColumn("距离", ImGuiTableColumnFlags_WidthFixed, 80.0f);
-        ImGui::TableSetupColumn("状态", ImGuiTableColumnFlags_WidthFixed, 110.0f);
-        ImGui::TableSetupColumn("通缉", ImGuiTableColumnFlags_WidthFixed, 50.0f);
+        ImGui::TableSetupColumn("序号", ImGuiTableColumnFlags_WidthFixed, 44.0f);
+        ImGui::TableSetupColumn("名称", ImGuiTableColumnFlags_WidthFixed, 130.0f);
+        ImGui::TableSetupColumn("等级", ImGuiTableColumnFlags_WidthFixed, 52.0f);
+        ImGui::TableSetupColumn("金钱", ImGuiTableColumnFlags_WidthFixed, 90.0f);
+        ImGui::TableSetupColumn("K/D", ImGuiTableColumnFlags_WidthFixed, 58.0f);
+        ImGui::TableSetupColumn("血量", ImGuiTableColumnFlags_WidthFixed, 60.0f);
+        ImGui::TableSetupColumn("护甲", ImGuiTableColumnFlags_WidthFixed, 60.0f);
+        ImGui::TableSetupColumn("距离", ImGuiTableColumnFlags_WidthFixed, 70.0f);
+        ImGui::TableSetupColumn("状态", ImGuiTableColumnFlags_WidthFixed, 96.0f);
         ImGui::TableHeadersRow();
 
         int row = 0;
@@ -216,7 +218,7 @@ void MenuManager::RenderSessionPageContent()
 
             ImGui::TableNextColumn();
             const bool selected = (row == selectedIndex);
-            if (ImGui::Selectable(std::to_string(player.PlayerIndex).c_str(), selected,
+            if (ImGui::Selectable(std::to_string(player.DisplayIndex > 0 ? player.DisplayIndex : row + 1).c_str(), selected,
                                   ImGuiSelectableFlags_SpanAllColumns))
             {
                 selectedIndex = row;
@@ -229,6 +231,24 @@ void MenuManager::RenderSessionPageContent()
                 ImGui::SameLine();
                 ImGui::TextColored(ConsoleTheme::Accent(), "(本地)");
             }
+
+            ImGui::TableNextColumn();
+            if (player.Rank > 0)
+                ImGui::Text("%d", player.Rank);
+            else
+                ImGui::TextDisabled("-");
+
+            ImGui::TableNextColumn();
+            if (player.Money > 0)
+                ImGui::Text("%.1fM", player.Money / 1000000.0);
+            else
+                ImGui::TextDisabled("-");
+
+            ImGui::TableNextColumn();
+            if (player.KillsOnPlayers + player.DeathsByPlayers > 0)
+                ImGui::Text("%.2f", player.KdRatio);
+            else
+                ImGui::TextDisabled("-");
 
             ImGui::TableNextColumn();
             ImGui::Text("%.0f", player.Health);
@@ -246,9 +266,6 @@ void MenuManager::RenderSessionPageContent()
                 ImGui::TextColored(ConsoleTheme::Accent(), "载具中");
             else
                 ImGui::TextDisabled("步行");
-
-            ImGui::TableNextColumn();
-            ImGui::TextUnformatted(player.WantedLevel > 0 ? std::to_string(player.WantedLevel).c_str() : "-");
 
             ImGui::PopID();
             ++row;
@@ -274,12 +291,42 @@ void MenuManager::RenderSessionPageContent()
         return;
     }
 
-    ImGui::TextColored(ConsoleTheme::Accent(), "%s", selected.Name);
-    ImGui::SameLine();
-    ImGui::TextDisabled("RID %lld · Ped 0x%llX", static_cast<long long>(selected.RockstarId),
-                        static_cast<unsigned long long>(selected.PedAddress));
+    // 详情统计表
+    if (ImGui::BeginTable("##player_detail", 4, ImGuiTableFlags_SizingStretchProp))
+    {
+        ImGui::TableNextColumn(); ImGui::TextDisabled("等级");
+        ImGui::TableNextColumn(); ImGui::Text("%d", selected.Rank);
+        ImGui::TableNextColumn(); ImGui::TextDisabled("金钱");
+        ImGui::TableNextColumn(); ImGui::Text("%d", selected.Money);
+
+        ImGui::TableNextColumn(); ImGui::TextDisabled("RP");
+        ImGui::TableNextColumn(); ImGui::Text("%d", selected.RP);
+        ImGui::TableNextColumn(); ImGui::TextDisabled("K/D");
+        ImGui::TableNextColumn(); ImGui::Text("%.2f (%d/%d)", selected.KdRatio, selected.KillsOnPlayers, selected.DeathsByPlayers);
+
+        ImGui::TableNextColumn(); ImGui::TextDisabled("RID");
+        ImGui::TableNextColumn(); ImGui::Text("%lld", static_cast<long long>(selected.RockstarId));
+        ImGui::TableNextColumn(); ImGui::TextDisabled("通缉");
+        ImGui::TableNextColumn(); ImGui::Text("%d", selected.WantedLevel);
+
+        ImGui::TableNextColumn(); ImGui::TextDisabled("位置");
+        ImGui::TableNextColumn(); ImGui::Text("%.0f, %.0f, %.0f", selected.Position.x, selected.Position.y, selected.Position.z);
+        ImGui::TableNextColumn(); ImGui::TextDisabled("Ped");
+        ImGui::TableNextColumn(); ImGui::Text("0x%llX", static_cast<unsigned long long>(selected.PedAddress));
+        ImGui::EndTable();
+    }
 
     ImGui::Dummy(ImVec2(0.0f, 4.0f));
+
+    // 传送按钮（主题色）
+    if (ImGui::Button("传送到此玩家", ImVec2(150.0f, 0.0f)))
+    {
+        PlayerList::RequestTeleportTo(selected.PlayerIndex);
+    }
+    ImGui::SameLine();
+    ImGui::TextDisabled("把本地玩家传送到目标位置（错开 2 米防卡模）");
+
+    ImGui::Dummy(ImVec2(0.0f, 2.0f));
 
     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.80f, 0.20f, 0.20f, 1.0f));
     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.90f, 0.30f, 0.30f, 1.0f));
@@ -299,6 +346,14 @@ void MenuManager::RenderSettingsPageContent()
 {
     ConsoleTheme::SectionHeader("界面主题", "切换控制台配色方案");
     ConsoleTheme::RenderThemeSelector();
+
+    ImGui::Dummy(ImVec2(0.0f, 10.0f));
+    ConsoleTheme::SectionHeader("战局玩家", "玩家加入/离开日志");
+    bool logJoinLeave = PlayerList::bLogJoinLeave.load();
+    if (ConsoleTheme::ToggleRow("log_join_leave", "加入/离开日志", "在控制台输出玩家进出战局的消息", &logJoinLeave))
+    {
+        PlayerList::bLogJoinLeave.store(logJoinLeave);
+    }
 
     ImGui::Dummy(ImVec2(0.0f, 10.0f));
     ConsoleTheme::SectionHeader("快捷键", "本地与目标主机按键");

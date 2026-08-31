@@ -23,7 +23,8 @@
 
 struct SessionPlayer
 {
-    uint8_t  PlayerIndex = 0;
+    uint32_t DisplayIndex = 0;   // 显示序号（排序后分配，稳定）
+    uint8_t  PlayerIndex = 0;    // 网络 PlayerIndex（mgr 槽位）
     int64_t  RockstarId = 0;
     char     Name[20] = {};
     float    Health = 0.0f;
@@ -35,7 +36,15 @@ struct SessionPlayer
     bool     IsLocal = false;
     int32_t  WantedLevel = 0;
     uintptr_t PedAddress = 0;
+    uintptr_t NavigationAddress = 0;
     Vec3     Position = {};
+    // GPBD_FM 播放器统计（脚本全局 1855653；读取失败保持 0）
+    int32_t  Rank = 0;
+    int32_t  RP = 0;
+    int32_t  Money = 0;
+    float    KdRatio = 0.0f;
+    int32_t  KillsOnPlayers = 0;
+    int32_t  DeathsByPlayers = 0;
 };
 
 class PlayerList
@@ -51,9 +60,13 @@ public:
     static bool IsSessionActive();
     static int GetPlayerCount();
 
+    // 加入/离开日志开关（默认关闭；UI 设置页可切）
+    static inline std::atomic<bool> bLogJoinLeave{ false };
+
     // 对选中玩家执行的操作（DMA 线程消费）
     static void RequestExplode(uint8_t playerIndex);
     static void RequestKill(uint8_t playerIndex);
+    static void RequestTeleportTo(uint8_t playerIndex);   // 我 → 目标玩家
 
 private:
     enum class PedAction
@@ -63,7 +76,7 @@ private:
     };
 
     static void RefreshPlayers();
-    static uintptr_t GetPlayerMgrAddress();
     static uintptr_t FindPedByPlayerIndex(uint8_t playerIndex);
+    static void TeleportToPlayer(uint8_t playerIndex);
     static void ApplyPedAction(uint8_t playerIndex, PedAction action);
 };

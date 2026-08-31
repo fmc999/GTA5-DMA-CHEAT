@@ -28,9 +28,12 @@ namespace
         {"PlayerMgrPtr", "75 0E 48 8B 05 ? ? ? ? 48 8B 88 F0 00 00 00", 5, 9},
         {"AimCPedPtr", "48 8D 0D ?? ?? ?? ?? E8 ?? ?? ?? ?? 8B 0D ?? ?? ?? ?? 4C 8D 05 ?? ?? ?? ?? BA", 3, 7},
         {"WaypointPtr", "48 8D 0D ?? ?? ?? ?? C6 44 08 ?? 01 C7", 3, 7},
-        // 以下两条来自 GTA5_Enhanced_Offsets.CT（本地脚本/GTA+）
+        // 以下三条来自 GTA5_Enhanced_Offsets.CT（实体池/本地脚本/GTA+）
         {"LocalScriptsPtr", "48 8B 05 ? ? ? ? 48 89 34 F8 48 FF C7 48 39 FB 75 97", 3, 7},
-        {"GTAPlusPtr", "48 8D 15 ? ? ? ? 41 B8 18 02 00 00 E8", 3, 7}
+        {"GTAPlusPtr", "48 8D 15 ? ? ? ? 41 B8 18 02 00 00 E8", 3, 7},
+        // YimMenuV2 的 Ped 池加密指针（现代实现，跟版本维护）
+        // 命中后: match + 0x18 + 3 处 RIP 相对 -> PoolEncryption*
+        {"PedPoolPtr", "80 79 4B 00 0F 84 F5 00 00 00 48 89 F1", 0x1B, 0x1F}
     };
 }
 

@@ -23,6 +23,7 @@ uintptr_t Offsets::AimCPedPtr = Offsets::AimCPedPtr_Enhanced;
 uintptr_t Offsets::WaypointPtr = Offsets::WaypointPtr_Enhanced;
 uintptr_t Offsets::LocalScriptsPtr = Offsets::LocalScriptsPtr_Enhanced;
 uintptr_t Offsets::GTAPlusPtr = Offsets::GTAPlusPtr_Enhanced;
+uintptr_t Offsets::PedPoolPtr = Offsets::PedPoolPtr_Enhanced;
 
 MemoryBackend& DMA::Memory() noexcept
 {
@@ -389,6 +390,7 @@ bool DMA::ResolveRuntimeOffsets()
 		else if (spec.name == "WaypointPtr") fallback = Offsets::WaypointPtr;
 		else if (spec.name == "LocalScriptsPtr") fallback = Offsets::LocalScriptsPtr;
 		else if (spec.name == "GTAPlusPtr") fallback = Offsets::GTAPlusPtr;
+		else if (spec.name == "PedPoolPtr") fallback = Offsets::PedPoolPtr;
 		else continue;
 
 		const auto result = OffsetResolver::ResolveOne(
@@ -404,6 +406,7 @@ bool DMA::ResolveRuntimeOffsets()
 			else if (spec.name == "WaypointPtr") Offsets::WaypointPtr = result.value;
 			else if (spec.name == "LocalScriptsPtr") Offsets::LocalScriptsPtr = result.value;
 			else if (spec.name == "GTAPlusPtr") Offsets::GTAPlusPtr = result.value;
+			else if (spec.name == "PedPoolPtr") Offsets::PedPoolPtr = result.value;
 
 			std::println("[Offsets] {} = 0x{:X} (pattern)", result.name, result.value);
 			++resolved;

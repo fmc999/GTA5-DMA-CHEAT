@@ -253,7 +253,9 @@ public:
     char pad_005C[4];                  //0x005C
     uint8_t m_ActiveIndex;             //0x0060
     uint8_t m_PlayerIndex;             //0x0061
-    char pad_0062[0x7E];               //0x0062
+    char pad_0062[0x6E];               //0x0062
+    uint8_t m_Flags;                   //0x00D0  bit0 = IsLocal（YimMenu netPlayer）
+    char pad_00D1[0x0F];               //0x00D1
     void* m_Unk;                       //0x00E0
     class PlayerInfo* m_PlayerInfo;    //0x00E8
     char pad_00F0[0x280];              //0x00F0
@@ -262,3 +264,31 @@ static_assert(sizeof(CNetGamePlayer) == 0x370);
 static_assert(offsetof(CNetGamePlayer, m_RockstarId) == 0x10);
 static_assert(offsetof(CNetGamePlayer, m_PlayerIndex) == 0x61);
 static_assert(offsetof(CNetGamePlayer, m_PlayerInfo) == 0xE8);
+
+// ============================ rage 池结构（YimMenuV2 现代实现） ============================
+// RDR 移植的加密池指针（Enhanced 反作弊手段），解密后为 fwBasePool
+class PoolEncryption
+{
+public:
+    bool m_IsSet;       //0x0000
+    char pad_0001[7];   //0x0001
+    uint64_t m_First;   //0x0008
+    uint64_t m_Second;  //0x0010
+}; //Size: 0x0018
+static_assert(sizeof(PoolEncryption) == 0x18);
+
+class fwBasePool
+{
+public:
+    char pad_0000[8];           //0x0000  vtable
+    uintptr_t m_Entries;        //0x0008  条目数组
+    uint8_t* m_Flags;           //0x0010  槽位标志（bit7=空闲）
+    uint32_t m_Size;            //0x0018
+    uint32_t m_ItemSize;        //0x001C
+    uint32_t m_NextSlotIndex;   //0x0020
+    uint32_t m_0024;            //0x0024
+    uint32_t m_FreeSlotIndex;   //0x0028
+
+    bool IsValid(uint32_t index) const { return !(m_Flags[index] & 0x80); }
+}; //Size: 0x0030
+static_assert(sizeof(fwBasePool) == 0x30);

@@ -1,0 +1,22 @@
+feat: session player list with YimMenuV2 pool, stats and teleport
+
+Session player monitoring (Players page):
+- YimMenuV2 encrypted ped pool (PoolEncryption + rotl64 decrypt, fwBasePool
+  iteration) — current-build-verified chain replacing stale CT offsets
+- Per-player: name, RID, rank/money/RP/K/D (GPBD_FM script globals),
+  health, armor, distance, god mode, in-vehicle (dual-signal: 0xE32 state
+  bit + 0xD10 pointer), wanted level, position
+- Player-to-mgr slot matching by name for stats/RID; local via IsLocal flag
+- Teleport-to-player action; kill action via ped health write
+- Stable sort (local first, ranked, alphabetical) with display index
+- Join/leave tracking with 2-frame debounce; console log gated by a
+  settings toggle (default off)
+- All remote reads are small targeted field reads (large struct reads
+  partially fail over DMA)
+
+Offset system additions:
+- PedPoolPtr signature (YimMenu's) resolving to encrypted pool pointer
+- Removed dead ReplayInterfacePtr (signature no longer matches current
+  build); catalog now 9 verified signatures, 9/9 resolved on target hw
+- PED/pool structures in Reclass.h (fwBasePool, PoolEncryption,
+  CNetGamePlayer m_Flags, CNetworkPlayerMgr)
