@@ -1,0 +1,255 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Core">
+      <UniqueIdentifier>{10000000-0000-0000-0000-000000000001}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Features">
+      <UniqueIdentifier>{10000000-0000-0000-0000-000000000002}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="UI">
+      <UniqueIdentifier>{10000000-0000-0000-0000-000000000003}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Attic">
+      <UniqueIdentifier>{10000000-0000-0000-0000-000000000004}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ImGui">
+      <UniqueIdentifier>{10000000-0000-0000-0000-000000000005}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\ImGui\imgui.cpp">
+      <Filter>ImGui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\ImGui\imgui_demo.cpp">
+      <Filter>ImGui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\ImGui\imgui_draw.cpp">
+      <Filter>ImGui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\ImGui\imgui_impl_dx11.cpp">
+      <Filter>ImGui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\ImGui\imgui_impl_win32.cpp">
+      <Filter>ImGui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\ImGui\imgui_tables.cpp">
+      <Filter>ImGui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\ImGui\imgui_widgets.cpp">
+      <Filter>ImGui</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\main.cpp">
+      <Filter>Core</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\pch.cpp">
+      <Filter>Core</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\AppRuntime.cpp">
+      <Filter>Core</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\DMA.cpp">
+      <Filter>Core</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\InputManager.cpp">
+      <Filter>Core</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\MemoryBackend.cpp">
+      <Filter>Core</Filter>
+    </ClCompile>
+    <ClCompile Include="Features\GodMode.cpp">
+      <Filter>Features</Filter>
+    </ClCompile>
+    <ClCompile Include="Features\NoWanted.cpp">
+      <Filter>Features</Filter>
+    </ClCompile>
+    <ClCompile Include="Features\RefreshHealth.cpp">
+      <Filter>Features</Filter>
+    </ClCompile>
+    <ClCompile Include="Features\HealthManager.cpp">
+      <Filter>Features</Filter>
+    </ClCompile>
+    <ClCompile Include="Features\ArmorManager.cpp">
+      <Filter>Features</Filter>
+    </ClCompile>
+    <ClCompile Include="Features\Ragdoll.cpp">
+      <Filter>Features</Filter>
+    </ClCompile>
+    <ClCompile Include="Features\PlayerSpeed.cpp">
+      <Filter>Features</Filter>
+    </ClCompile>
+    <ClCompile Include="Features\Invisibility.cpp">
+      <Filter>Features</Filter>
+    </ClCompile>
+    <ClCompile Include="Features\NoCollision.cpp">
+      <Filter>Features</Filter>
+    </ClCompile>
+    <ClCompile Include="Features\Teleport.cpp">
+      <Filter>Features</Filter>
+    </ClCompile>
+    <ClCompile Include="Features\VehicleEditor.cpp">
+      <Filter>Features</Filter>
+    </ClCompile>
+    <ClCompile Include="Features\WeaponInspector.cpp">
+      <Filter>Features</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\MyImGui.cpp">
+      <Filter>UI</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\MyMenu.cpp">
+      <Filter>UI</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\ConsoleShell.cpp">
+      <Filter>UI</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\ConsoleTheme.cpp">
+      <Filter>UI</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\MenuManager.cpp">
+      <Filter>UI</Filter>
+    </ClCompile>
+    <ClCompile Include="Attic\TimeControl.cpp">
+      <Filter>Attic</Filter>
+    </ClCompile>
+    <ClCompile Include="Attic\HeistDividend.cpp">
+      <Filter>Attic</Filter>
+    </ClCompile>
+    <ClCompile Include="Attic\PlayerChaser.cpp">
+      <Filter>Attic</Filter>
+    </ClCompile>
+    <ClCompile Include="Attic\PlayerChaserMenu.cpp">
+      <Filter>Attic</Filter>
+    </ClCompile>
+    <ClCompile Include="Attic\Dev.cpp">
+      <Filter>Attic</Filter>
+    </ClCompile>
+    <ClCompile Include="Attic\LegacyPages.cpp">
+      <Filter>Attic</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\ImGui\imconfig.h">
+      <Filter>ImGui</Filter>
+    </ClInclude>
+    <ClInclude Include="..\ImGui\imgui.h">
+      <Filter>ImGui</Filter>
+    </ClInclude>
+    <ClInclude Include="..\ImGui\imgui_impl_dx11.h">
+      <Filter>ImGui</Filter>
+    </ClInclude>
+    <ClInclude Include="..\ImGui\imgui_impl_win32.h">
+      <Filter>ImGui</Filter>
+    </ClInclude>
+    <ClInclude Include="..\ImGui\imgui_internal.h">
+      <Filter>ImGui</Filter>
+    </ClInclude>
+    <ClInclude Include="..\ImGui\imstb_rectpack.h">
+      <Filter>ImGui</Filter>
+    </ClInclude>
+    <ClInclude Include="..\ImGui\imstb_textedit.h">
+      <Filter>ImGui</Filter>
+    </ClInclude>
+    <ClInclude Include="..\ImGui\imstb_truetype.h">
+      <Filter>ImGui</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\pch.h">
+      <Filter>Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\AppRuntime.h">
+      <Filter>Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\DMA.h">
+      <Filter>Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\InputManager.h">
+      <Filter>Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\MemoryBackend.h">
+      <Filter>Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\Offsets.h">
+      <Filter>Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\Vector.h">
+      <Filter>Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\Reclass.h">
+      <Filter>Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Features\Features.h">
+      <Filter>Features</Filter>
+    </ClInclude>
+    <ClInclude Include="Features\Locations.h">
+      <Filter>Features</Filter>
+    </ClInclude>
+    <ClInclude Include="Features\GodMode.h">
+      <Filter>Features</Filter>
+    </ClInclude>
+    <ClInclude Include="Features\NoWanted.h">
+      <Filter>Features</Filter>
+    </ClInclude>
+    <ClInclude Include="Features\RefreshHealth.h">
+      <Filter>Features</Filter>
+    </ClInclude>
+    <ClInclude Include="Features\HealthManager.h">
+      <Filter>Features</Filter>
+    </ClInclude>
+    <ClInclude Include="Features\ArmorManager.h">
+      <Filter>Features</Filter>
+    </ClInclude>
+    <ClInclude Include="Features\Ragdoll.h">
+      <Filter>Features</Filter>
+    </ClInclude>
+    <ClInclude Include="Features\PlayerSpeed.h">
+      <Filter>Features</Filter>
+    </ClInclude>
+    <ClInclude Include="Features\Invisibility.h">
+      <Filter>Features</Filter>
+    </ClInclude>
+    <ClInclude Include="Features\NoCollision.h">
+      <Filter>Features</Filter>
+    </ClInclude>
+    <ClInclude Include="Features\Teleport.h">
+      <Filter>Features</Filter>
+    </ClInclude>
+    <ClInclude Include="Features\VehicleEditor.h">
+      <Filter>Features</Filter>
+    </ClInclude>
+    <ClInclude Include="Features\WeaponInspector.h">
+      <Filter>Features</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\MyImGui.h">
+      <Filter>UI</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\MyMenu.h">
+      <Filter>UI</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\ConsoleShell.h">
+      <Filter>UI</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\ConsoleTheme.h">
+      <Filter>UI</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\MenuManager.h">
+      <Filter>UI</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\AppFonts.h">
+      <Filter>UI</Filter>
+    </ClInclude>
+    <ClInclude Include="Attic\TimeControl.h">
+      <Filter>Attic</Filter>
+    </ClInclude>
+    <ClInclude Include="Attic\HeistDividend.h">
+      <Filter>Attic</Filter>
+    </ClInclude>
+    <ClInclude Include="Attic\PlayerChaser.h">
+      <Filter>Attic</Filter>
+    </ClInclude>
+    <ClInclude Include="Attic\PlayerChaserMenu.h">
+      <Filter>Attic</Filter>
+    </ClInclude>
+    <ClInclude Include="Attic\Dev.h">
+      <Filter>Attic</Filter>
+    </ClInclude>
+  </ItemGroup>
+</Project>

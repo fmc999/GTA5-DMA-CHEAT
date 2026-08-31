@@ -1,0 +1,42 @@
+# VS / build artifacts
+.vs/
+**/.vs/
+**/x64/
+**/Debug/
+**/Release/
+*.user
+*.suo
+*.VC.db
+*.VC.opendb
+*.obj
+*.pch
+*.pdb
+*.ilk
+*.iobj
+*.ipdb
+*.tlog
+*.lastbuildstate
+*.log
+Thumbs.db
+Desktop.ini
+
+# runtime / local-only
+imgui.ini
+*.exe
+*.dll
+*.lib
+.vscode/
+
+# local backups & one-off artifacts (not part of the source tree)
+_backup_pre_restructure/
+_artifacts_restructure/
+_rollback_sandbox/
+
+# local reference archives (never tracked)
+CT_Scripts */
+历史版本备份*/
+
+# runtime assets loaded from CWD
+BG.png
+AIMSHOOTNAME.txt
+_commit_msg.txt
