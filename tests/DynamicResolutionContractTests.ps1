@@ -20,13 +20,14 @@ $memoryBackendSource = Read-Source 'Core\MemoryBackend.cpp'
 $offsets = Read-Source 'Core\Offsets.h'
 $project = Read-Source 'GTA5_DMA.vcxproj'
 
-Require (-not $dma.Contains('OffsetResolver.h')) 'dynamic resolver include is still active'
-Require (-not $dma.Contains('ResolveRuntimeOffsets')) 'dynamic resolver dispatch is still active'
-Require (-not $dma.Contains('LoadExecutableSection')) 'PE section scanning is still active in DMA'
+Require ($dma.Contains('OffsetResolver.h')) 'dynamic resolver include is missing'
+Require ($dma.Contains('ResolveRuntimeOffsets')) 'dynamic resolver dispatch is missing'
+Require ($dma.Contains('LoadExecutableSection')) 'PE section scanning is not integrated in DMA'
 Require ($dmaHeader.Contains('MemoryBackend')) 'DMA does not expose the checked backend'
 $initializeMatch = [regex]::Match($dma, '(?s)bool DMA::Initialize\(\).*?bool DMA::DMAThreadEntry\(\)')
 Require ($initializeMatch.Success) 'DMA::Initialize body was not found'
 $initialize = $initializeMatch.Value
+Require ($initialize.Contains('ResolveRuntimeOffsets();')) 'dynamic resolver is not invoked after Enhanced attach'
 Require ($initialize.Contains('Offsets::SetOffsetsByPackageName')) 'static offset selection is missing'
 Require ([regex]::IsMatch($initialize, 'Offsets::SetOffsetsByPackageName\("GTA5_Enhanced\.exe"\);\s*Memory\(\)\.Attach\(vmh, PID\);')) 'Enhanced static selection is not retained'
 Require ([regex]::IsMatch($initialize, 'Offsets::SetOffsetsByPackageName\("GTA5\.exe"\);\s*Memory\(\)\.Attach\(vmh, PID\);')) 'Legacy static selection is not retained'
@@ -41,7 +42,7 @@ foreach ($file in @('Core\MemoryBackend.cpp', 'Core\MemoryBackend.h')) {
     Require ($project.Contains("Include=""$file""")) "project does not register $file"
 }
 foreach ($file in @('Core\PatternScanner.cpp', 'Core\PatternScanner.h', 'Core\OffsetResolver.cpp', 'Core\OffsetResolver.h')) {
-    Require (-not $project.Contains("Include=""$file""")) "dynamic resolver file remains registered: $file"
+    Require ($project.Contains("Include=""$file""")) "dynamic resolver file is not registered: $file"
 }
 
 foreach ($constant in @('WorldPtr_Enhanced', 'WorldPtr_Original', 'GlobalPtr_Enhanced', 'GlobalPtr_Original', 'BlipPtr_Enhanced', 'BlipPtr_Original')) {

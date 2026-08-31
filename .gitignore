@@ -31,6 +31,7 @@ imgui.ini
 _backup_pre_restructure/
 _artifacts_restructure/
 _rollback_sandbox/
+_release_stage/
 
 # local reference archives (never tracked)
 CT_Scripts */

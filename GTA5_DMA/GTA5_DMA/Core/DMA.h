@@ -23,6 +23,7 @@ public: /* Interface variables */
 
 public: /* DMA Interface function */
 	static bool IsReady() noexcept { return vmh != 0 && PID != 0; }
+	static bool ResolveRuntimeOffsets();  // 启动时特征码扫描，动态解析 Enhanced 偏移（失败回退静态值）
 	static bool IsValidAddress(uintptr_t address) noexcept { return IsReady() && address != 0; }
 	static MemoryBackend& Memory() noexcept;
 	static bool Initialize();

@@ -168,6 +168,12 @@ int main()
 
     assert(PatternScanner::FindUnique(bytes, "").status == ScanStatus::InvalidPattern);
     assert(PatternScanner::FindUnique(bytes, "48 GG").status == ScanStatus::InvalidPattern);
+    // ** 通配符（用户 CT 特征码使用 ** 形式）
+    {
+        const std::vector<std::uint8_t> wild{0xAA, 0x11, 0x22, 0x33, 0x44};
+        auto r1 = PatternScanner::FindUnique(wild, "AA ** ** ** 44");
+        assert(r1.status == ScanStatus::Found && r1.offset == 0);
+    }
     assert(PatternScanner::FindUnique(bytes, "4").status == ScanStatus::InvalidPattern);
     assert(PatternScanner::FindUnique(bytes, "CC").status == ScanStatus::NotFound);
     assert(PatternScanner::FindUnique(std::vector<std::uint8_t>{0x90, 0x90}, "90").status ==
@@ -330,7 +336,7 @@ int main()
     assert(fallbackForOutsideTarget.value == 0x443D1E8);
 
     const auto enhancedCatalog = OffsetResolver::GetCatalog(GameType::GTA5_Enhanced);
-    assert(enhancedCatalog.size() == 5);
+    assert(enhancedCatalog.size() == 8);
     assert(enhancedCatalog[0].name == "WorldPtr");
     assert(enhancedCatalog[0].pattern == "48 8B 0D ?? ?? ?? ?? 48 85 C9 74 ?? 48 8B 49 ?? 48 8D");
     assert(enhancedCatalog[1].name == "GlobalPtr");
@@ -341,6 +347,12 @@ int main()
     assert(enhancedCatalog[3].pattern == "75 0E 48 8B 05 ? ? ? ? 48 8B 88 F0 00 00 00");
     assert(enhancedCatalog[4].name == "AimCPedPtr");
     assert(enhancedCatalog[4].pattern == "48 8D 0D ?? ?? ?? ?? E8 ?? ?? ?? ?? 8B 0D ?? ?? ?? ?? 4C 8D 05 ?? ?? ?? ?? BA");
+    assert(enhancedCatalog[5].name == "WaypointPtr");
+    assert(enhancedCatalog[5].pattern == "48 8D 0D ?? ?? ?? ?? C6 44 08 ?? 01 C7");
+    assert(enhancedCatalog[6].name == "LocalScriptsPtr");
+    assert(enhancedCatalog[6].pattern == "48 8B 05 ? ? ? ? 48 89 34 F8 48 FF C7 48 39 FB 75 97");
+    assert(enhancedCatalog[7].name == "GTAPlusPtr");
+    assert(enhancedCatalog[7].pattern == "48 8D 15 ? ? ? ? 41 B8 18 02 00 00 E8");
     assert(OffsetResolver::GetCatalog(GameType::GTA5).empty());
 
     return 0;

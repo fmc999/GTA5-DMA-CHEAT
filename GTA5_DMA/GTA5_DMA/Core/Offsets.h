@@ -30,6 +30,13 @@ namespace Offsets
 	// 玩家管理器偏移量
 	static const uintptr_t PlayerMgrPtr_Enhanced = 0x048591D8;
 	static const uintptr_t AimCPedPtr_Enhanced = 0x03EDC060;
+
+	// 导航点（无已验证静态值：0 = 未解析，传送回退 Blip 扫描）
+	static const uintptr_t WaypointPtr_Enhanced = 0;
+
+	// 实体池/本地脚本/GTA+（仅特征码解析，无静态回退；0 = 未解析则不启用对应功能）
+	static const uintptr_t LocalScriptsPtr_Enhanced = 0;
+	static const uintptr_t GTAPlusPtr_Enhanced = 0;
 	static const uintptr_t PlayerMgrPtr_Original = 0x02603908;
 	static const uintptr_t AimCPedPtr_Original = 0x0206D600;
 
@@ -40,6 +47,9 @@ namespace Offsets
 	extern uintptr_t TimeBasePtr;
 	extern uintptr_t PlayerMgrPtr;
 	extern uintptr_t AimCPedPtr;
+	extern uintptr_t WaypointPtr;   // 导航点 vec3（基址+0x20 处存放 X/Y/Z）
+	extern uintptr_t LocalScriptsPtr;    // 本地脚本指针
+	extern uintptr_t GTAPlusPtr;         // GTA+ 状态
 	
 	// 根据包名设置偏移量和游戏类型
 	inline void SetOffsetsByPackageName(const std::string& packageName)
@@ -52,6 +62,9 @@ namespace Offsets
 			TimeBasePtr = TimeBasePtr_Enhanced;
 			PlayerMgrPtr = PlayerMgrPtr_Enhanced;
 			AimCPedPtr = AimCPedPtr_Enhanced;
+			WaypointPtr = WaypointPtr_Enhanced;
+			LocalScriptsPtr = LocalScriptsPtr_Enhanced;
+			GTAPlusPtr = GTAPlusPtr_Enhanced;
 			currentGameType = GameType::GTA5_Enhanced;
 		}
 		else if (packageName == "GTA5.exe")

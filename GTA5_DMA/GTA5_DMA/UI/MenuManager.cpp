@@ -11,6 +11,7 @@
 #include "Invisibility.h"
 #include "NoCollision.h"
 #include "NoWanted.h"
+#include "PlayerList.h"
 #include "PlayerSpeed.h"
 #include "RefreshHealth.h"
 #include "Teleport.h"
@@ -170,6 +171,126 @@ void MenuManager::RenderTeleportPageContent()
 void MenuManager::RenderVehiclePageContent()
 {
     VehicleEditor::RenderContent();
+}
+
+/* ---------- 战局玩家 ---------- */
+
+void MenuManager::RenderSessionPageContent()
+{
+    if (!PlayerList::IsSessionActive())
+    {
+        ImGui::Dummy(ImVec2(0.0f, 30.0f));
+        ImGui::TextColored(ConsoleTheme::Warning(), "未检测到在线战局");
+        ImGui::TextDisabled("进入线上模式后，此处将显示战局内的所有玩家");
+        return;
+    }
+
+    const std::vector<SessionPlayer> players = PlayerList::GetSnapshot();
+
+    ConsoleTheme::SectionHeader("战局玩家", "点击行选中玩家");
+
+    // 玩家表格
+    static int selectedIndex = -1;
+    const ImGuiTableFlags flags =
+        ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV |
+        ImGuiTableFlags_ScrollY | ImGuiTableFlags_SizingStretchProp;
+
+    const float tableHeight = ImGui::GetContentRegionAvail().y - 130.0f;
+    if (ImGui::BeginTable("##session_players", 7, flags, ImVec2(0.0f, tableHeight)))
+    {
+        ImGui::TableSetupScrollFreeze(0, 1);
+        ImGui::TableSetupColumn("序号", ImGuiTableColumnFlags_WidthFixed, 46.0f);
+        ImGui::TableSetupColumn("名称", ImGuiTableColumnFlags_WidthFixed, 150.0f);
+        ImGui::TableSetupColumn("血量", ImGuiTableColumnFlags_WidthFixed, 70.0f);
+        ImGui::TableSetupColumn("护甲", ImGuiTableColumnFlags_WidthFixed, 70.0f);
+        ImGui::TableSetupColumn("距离", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+        ImGui::TableSetupColumn("状态", ImGuiTableColumnFlags_WidthFixed, 110.0f);
+        ImGui::TableSetupColumn("通缉", ImGuiTableColumnFlags_WidthFixed, 50.0f);
+        ImGui::TableHeadersRow();
+
+        int row = 0;
+        for (const SessionPlayer& player : players)
+        {
+            ImGui::TableNextRow();
+            ImGui::PushID(row);
+
+            ImGui::TableNextColumn();
+            const bool selected = (row == selectedIndex);
+            if (ImGui::Selectable(std::to_string(player.PlayerIndex).c_str(), selected,
+                                  ImGuiSelectableFlags_SpanAllColumns))
+            {
+                selectedIndex = row;
+            }
+
+            ImGui::TableNextColumn();
+            ImGui::TextUnformatted(player.Name);
+            if (player.IsLocal)
+            {
+                ImGui::SameLine();
+                ImGui::TextColored(ConsoleTheme::Accent(), "(本地)");
+            }
+
+            ImGui::TableNextColumn();
+            ImGui::Text("%.0f", player.Health);
+
+            ImGui::TableNextColumn();
+            ImGui::Text("%.0f", player.Armor);
+
+            ImGui::TableNextColumn();
+            ImGui::Text("%.0fm", player.Distance);
+
+            ImGui::TableNextColumn();
+            if (player.GodMode)
+                ImGui::TextColored(ConsoleTheme::Danger(), "无敌");
+            else if (player.InVehicle)
+                ImGui::TextColored(ConsoleTheme::Accent(), "载具中");
+            else
+                ImGui::TextDisabled("步行");
+
+            ImGui::TableNextColumn();
+            ImGui::TextUnformatted(player.WantedLevel > 0 ? std::to_string(player.WantedLevel).c_str() : "-");
+
+            ImGui::PopID();
+            ++row;
+        }
+        ImGui::EndTable();
+    }
+
+    // 选中玩家详情 + 操作
+    ImGui::Dummy(ImVec2(0.0f, 6.0f));
+    ImGui::Separator();
+    ImGui::Dummy(ImVec2(0.0f, 6.0f));
+
+    if (selectedIndex < 0 || selectedIndex >= static_cast<int>(players.size()))
+    {
+        ImGui::TextDisabled("选中上方列表中的玩家以执行操作");
+        return;
+    }
+
+    const SessionPlayer& selected = players[selectedIndex];
+    if (selected.IsLocal)
+    {
+        ImGui::TextDisabled("选中玩家是本地玩家，操作不可用");
+        return;
+    }
+
+    ImGui::TextColored(ConsoleTheme::Accent(), "%s", selected.Name);
+    ImGui::SameLine();
+    ImGui::TextDisabled("RID %lld · Ped 0x%llX", static_cast<long long>(selected.RockstarId),
+                        static_cast<unsigned long long>(selected.PedAddress));
+
+    ImGui::Dummy(ImVec2(0.0f, 4.0f));
+
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.80f, 0.20f, 0.20f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.90f, 0.30f, 0.30f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.70f, 0.10f, 0.10f, 1.0f));
+    if (ImGui::Button("击杀 (血量清零)", ImVec2(150.0f, 0.0f)))
+    {
+        PlayerList::RequestKill(selected.PlayerIndex);
+    }
+    ImGui::PopStyleColor(3);
+    ImGui::SameLine();
+    ImGui::TextDisabled("通过内存写入目标玩家血量，对无敌目标无效");
 }
 
 /* ---------- 系统设置 ---------- */

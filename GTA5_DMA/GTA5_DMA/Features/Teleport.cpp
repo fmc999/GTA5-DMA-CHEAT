@@ -522,6 +522,22 @@ Vec3 Teleport::GetWaypointCoords()
 		return WaypointCoordinates;
 	}
 
+	// 优先路径：动态解析的导航点基址（基址+0x20 处直接存放 vec3 坐标）
+	// 参考 CT 表: WaypointPTR 反编译基址 + 0x20 = X (+4=Y, +4=Z)
+	if (Offsets::WaypointPtr != 0)
+	{
+		Vec3 direct = { 0.0f, 0.0f, 0.0f };
+		if (DMA::Memory().Read(DMA::BaseAddress + Offsets::WaypointPtr + 0x20, &direct, sizeof(direct)))
+		{
+			if (direct.x != 0.0f || direct.y != 0.0f)
+			{
+				printf("Waypoint from resolved base: %.2f %.2f %.2f\n", direct.x, direct.y, direct.z);
+				return direct;
+			}
+		}
+	}
+
+	// 回退路径：Blip 数组扫描（ID 8 = 导航点）
 	uintptr_t BlipsArrayAddress = DMA::BaseAddress + Offsets::BlipPtr;
 	const int MaxRetries = 3;
 	int RetryCount = 0;

@@ -45,10 +45,14 @@ static_assert(offsetof(PED, pCModelInfo) == 0x20);
 class PlayerInfo
 {
 public:
-	char pad_0000[184]; //0x0000
-	int32_t N00000406; //0x00B8
-	int32_t N00000409; //0x00BC
-	char pad_00C0[292]; //0x00C0
+	char pad_0000[152]; //0x0000
+	class PED* m_Ped; //0x0098  所属玩家 Ped
+	char pad_00A0[92]; //0x00A0
+	char Name[20]; //0x00FC  玩家名称（CT: CPlayerInfo.Name）
+	char pad_0110[20]; //0x0110
+	int32_t N00000406; //0x0124
+	int32_t N00000409; //0x0128
+	char pad_012C[180]; //0x012C
 	float WalkSpeed; //0x01E4
 	char pad_01E8[1792]; //0x01E8
 	int32_t WantedLevel; //0x08E8
@@ -56,6 +60,9 @@ public:
 	float RunSpeed; //0x0D50
 	char pad_0D54[916]; //0x0D54
 }; //Size: 0x10E8
+static_assert(sizeof(PlayerInfo) == 0x10E8);
+static_assert(offsetof(PlayerInfo, Name) == 0xFC);
+static_assert(offsetof(PlayerInfo, m_Ped) == 0x98);
 static_assert(sizeof(PlayerInfo) == 0x10E8);
 
 class WeaponInventory
@@ -215,3 +222,43 @@ public:
 }; //Size: 0x0188
 static_assert(sizeof(CModelInfo) == 0x188);
 static_assert(offsetof(CModelInfo, ModelHash) == 0x18);
+
+// ============================ 网络玩家结构 ============================
+// 参考 YimMenuV2 结构定义与本仓库 CT 表（GTA5_Enhanced.CT）
+// CNetworkPlayerMgrPTR -> CNetworkPlayerMgr
+class CNetworkPlayerMgr
+{
+public:
+    char pad_0000[0x188];              //0x0000  netPlayerMgrBase 头部（虚表/连接管理/本地玩家）
+    class CNetGamePlayer* m_Players[32]; //0x0188  战局玩家指针数组
+    uint32_t m_MaxPlayers;             //0x0288
+    char pad_028C[4];                  //0x028C
+    int m_UnloadedPlayerCount;         //0x0290
+    int m_LoadedPlayerCount;           //0x0294  当前玩家数量
+}; //Size: 0x0298
+static_assert(sizeof(CNetworkPlayerMgr) == 0x298);
+static_assert(offsetof(CNetworkPlayerMgr, m_Players) == 0x188);
+static_assert(offsetof(CNetworkPlayerMgr, m_MaxPlayers) == 0x288);
+
+// rage::netPlayer 基类头部（虚表 + 网络 ID），CNetGamePlayer 继承它
+class CNetGamePlayer
+{
+public:
+    char pad_0000[0x08];               //0x0000  vtable
+    int m_AccountId;                   //0x0008
+    char pad_000C[4];                  //0x000C
+    int64_t m_RockstarId;              //0x0010  R*
+    char pad_0018[0x40];               //0x0018
+    uint32_t m_MessageId;              //0x0058
+    char pad_005C[4];                  //0x005C
+    uint8_t m_ActiveIndex;             //0x0060
+    uint8_t m_PlayerIndex;             //0x0061
+    char pad_0062[0x7E];               //0x0062
+    void* m_Unk;                       //0x00E0
+    class PlayerInfo* m_PlayerInfo;    //0x00E8
+    char pad_00F0[0x280];              //0x00F0
+}; //Size: 0x0370
+static_assert(sizeof(CNetGamePlayer) == 0x370);
+static_assert(offsetof(CNetGamePlayer, m_RockstarId) == 0x10);
+static_assert(offsetof(CNetGamePlayer, m_PlayerIndex) == 0x61);
+static_assert(offsetof(CNetGamePlayer, m_PlayerInfo) == 0xE8);

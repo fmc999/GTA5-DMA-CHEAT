@@ -57,6 +57,12 @@
     <ClCompile Include="Core\MemoryBackend.cpp">
       <Filter>Core</Filter>
     </ClCompile>
+    <ClCompile Include="Core\PatternScanner.cpp">
+      <Filter>Core</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\OffsetResolver.cpp">
+      <Filter>Core</Filter>
+    </ClCompile>
     <ClCompile Include="Features\GodMode.cpp">
       <Filter>Features</Filter>
     </ClCompile>
@@ -91,6 +97,9 @@
       <Filter>Features</Filter>
     </ClCompile>
     <ClCompile Include="Features\WeaponInspector.cpp">
+      <Filter>Features</Filter>
+    </ClCompile>
+    <ClCompile Include="Features\PlayerList.cpp">
       <Filter>Features</Filter>
     </ClCompile>
     <ClCompile Include="UI\MyImGui.cpp">
@@ -173,6 +182,12 @@
     <ClInclude Include="Core\Vector.h">
       <Filter>Core</Filter>
     </ClInclude>
+    <ClInclude Include="Core\PatternScanner.h">
+      <Filter>Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\OffsetResolver.h">
+      <Filter>Core</Filter>
+    </ClInclude>
     <ClInclude Include="Core\Reclass.h">
       <Filter>Core</Filter>
     </ClInclude>
@@ -216,6 +231,9 @@
       <Filter>Features</Filter>
     </ClInclude>
     <ClInclude Include="Features\WeaponInspector.h">
+      <Filter>Features</Filter>
+    </ClInclude>
+    <ClInclude Include="Features\PlayerList.h">
       <Filter>Features</Filter>
     </ClInclude>
     <ClInclude Include="UI\MyImGui.h">

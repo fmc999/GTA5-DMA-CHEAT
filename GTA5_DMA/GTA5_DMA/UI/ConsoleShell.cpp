@@ -26,6 +26,7 @@ const char* PageTitle(MenuPage page)
     case MenuPage::VEHICLE:  return "载具编辑";
     case MenuPage::WEAPON:   return "武器功能";
     case MenuPage::TELEPORT: return "位置传送";
+    case MenuPage::SESSION:  return "战局玩家";
     case MenuPage::SETTINGS: return "系统设置";
     default:                 return "人物控制";
     }
@@ -38,6 +39,7 @@ const char* PageDescription(MenuPage page)
     case MenuPage::VEHICLE:  return "载具状态与操控参数";
     case MenuPage::WEAPON:   return "武器数据与命中参数";
     case MenuPage::TELEPORT: return "坐标、标记点与任务点";
+    case MenuPage::SESSION:  return "在线玩家列表与玩家操作";
     case MenuPage::SETTINGS: return "主题、快捷键与发布信息";
     default:                 return "实时参数与功能控制";
     }
@@ -108,6 +110,7 @@ void RenderNavigation(MenuManager& menu)
     if (ConsoleTheme::NavItem("人物控制", current == MenuPage::PLAYER))   menu.SetCurrentPage(MenuPage::PLAYER);
     if (ConsoleTheme::NavItem("载具编辑", current == MenuPage::VEHICLE))  menu.SetCurrentPage(MenuPage::VEHICLE);
     if (ConsoleTheme::NavItem("武器功能", current == MenuPage::WEAPON))   menu.SetCurrentPage(MenuPage::WEAPON);
+    if (ConsoleTheme::NavItem("战局玩家", current == MenuPage::SESSION))  menu.SetCurrentPage(MenuPage::SESSION);
     if (ConsoleTheme::NavItem("位置传送", current == MenuPage::TELEPORT)) menu.SetCurrentPage(MenuPage::TELEPORT);
     // DISABLED: 时间控制 / 任务分红导航入口 retained（实现见 Attic/LegacyPages.cpp）。
     if (ConsoleTheme::NavItem("系统设置", current == MenuPage::SETTINGS)) menu.SetCurrentPage(MenuPage::SETTINGS);
@@ -169,6 +172,7 @@ void RenderPage(MenuManager& menu)
     case MenuPage::VEHICLE:  menu.RenderVehiclePageContent(); break;
     case MenuPage::WEAPON:   menu.RenderWeaponPageContent(); break;
     case MenuPage::TELEPORT: menu.RenderTeleportPageContent(); break;
+    case MenuPage::SESSION:  menu.RenderSessionPageContent(); break;
     // DISABLED: 时间 / 任务分红路由 retained for later restoration。
     // case MenuPage::TIME: menu.RenderTimePageContent(); break;
     // case MenuPage::HEIST_DIVIDEND: menu.RenderHeistDividendPageContent(); break;

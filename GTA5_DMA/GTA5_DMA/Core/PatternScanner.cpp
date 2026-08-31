@@ -41,7 +41,7 @@ namespace
             }
 
             const std::string_view token = pattern.substr(tokenStart, cursor - tokenStart);
-            if (token == "?" || token == "??")
+            if (token == "?" || token == "??" || token == "**")
             {
                 parsed.push_back(PatternByte{.wildcard = true});
                 continue;

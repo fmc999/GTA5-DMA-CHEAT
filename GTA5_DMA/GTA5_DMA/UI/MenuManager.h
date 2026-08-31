@@ -9,6 +9,7 @@ enum class MenuPage {
     WEAPON,         // 武器功能
     TELEPORT,       // 传送功能
     VEHICLE,        // 载具功能
+    SESSION,        // 战局玩家
     TIME,           // 已停用：时间控制
     HEIST_DIVIDEND, // 已停用：抢劫分红
     SETTINGS        // 设置
@@ -34,6 +35,7 @@ public:
     void RenderWeaponPageContent();
     void RenderTeleportPageContent();
     void RenderVehiclePageContent();
+    void RenderSessionPageContent();
     void RenderSettingsPageContent();
 
 private:

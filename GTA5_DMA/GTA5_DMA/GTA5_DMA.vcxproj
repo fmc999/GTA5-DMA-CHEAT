@@ -178,6 +178,12 @@
     <ClCompile Include="Core\MemoryBackend.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
+    <ClCompile Include="Core\PatternScanner.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="Core\OffsetResolver.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
     <ClCompile Include="Features\GodMode.cpp" />
     <ClCompile Include="Features\NoWanted.cpp" />
     <ClCompile Include="Features\RefreshHealth.cpp" />
@@ -190,6 +196,7 @@
     <ClCompile Include="Features\Teleport.cpp" />
     <ClCompile Include="Features\VehicleEditor.cpp" />
     <ClCompile Include="Features\WeaponInspector.cpp" />
+    <ClCompile Include="Features\PlayerList.cpp" />
     <ClCompile Include="UI\MyImGui.cpp" />
     <ClCompile Include="UI\MyMenu.cpp" />
     <ClCompile Include="UI\ConsoleShell.cpp" />
@@ -218,6 +225,8 @@
     <ClInclude Include="Core\MemoryBackend.h" />
     <ClInclude Include="Core\Offsets.h" />
     <ClInclude Include="Core\Vector.h" />
+    <ClInclude Include="Core\PatternScanner.h" />
+    <ClInclude Include="Core\OffsetResolver.h" />
     <ClInclude Include="Core\Reclass.h" />
     <ClInclude Include="Features\Features.h" />
     <ClInclude Include="Features\Locations.h" />
@@ -233,6 +242,7 @@
     <ClInclude Include="Features\Teleport.h" />
     <ClInclude Include="Features\VehicleEditor.h" />
     <ClInclude Include="Features\WeaponInspector.h" />
+    <ClInclude Include="Features\PlayerList.h" />
     <ClInclude Include="UI\MyImGui.h" />
     <ClInclude Include="UI\MyMenu.h" />
     <ClInclude Include="UI\ConsoleShell.h" />
