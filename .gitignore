@@ -41,3 +41,8 @@ CT_Scripts */
 BG.png
 AIMSHOOTNAME.txt
 _commit_msg.txt
+
+# local verification artifacts
+_backup*/
+_ui_*
+_release_stage/

@@ -3,6 +3,8 @@
 #include <d3d11.h>
 
 // DirectX 11 + Win32 平台层：创建宿主窗口、D3D 设备与 ImGui 上下文，驱动渲染主循环。
+extern HWND g_AppHwnd;   // 窗口句柄全局（WindowState 持久化用）
+
 class MyImGui
 {
 public:

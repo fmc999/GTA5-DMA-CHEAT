@@ -169,6 +169,20 @@ public:
 }; //Size: 0x0890
 static_assert(sizeof(N000007DA) == 0x890);
 
+// YimMenuV2: rage::fwVehiclePool（非加密，虚表+池地址+位图）
+// 池指针为三重间接: VehiclePoolPtr 解析出 fwVehiclePool** (指针表)
+class FwVehiclePool
+{
+public:
+	void* vtbl;                    //0x0000 虚表
+	void** m_PoolAddress;          //0x0008 实体指针数组
+	uint32_t m_Size;               //0x0010 池大小
+	char pad_0014[36];             //0x0014
+	uint32_t* m_BitArray;          //0x0038 有效位图
+	char pad_003C[40];             //0x003C
+	uint32_t m_ItemCount;          //0x0064
+};
+
 class CVehicle
 {
 public:

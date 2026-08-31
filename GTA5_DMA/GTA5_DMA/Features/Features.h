@@ -11,3 +11,4 @@
 #include "Invisibility.h"
 #include "NoCollision.h"
 #include "PlayerList.h"
+#include "VehicleList.h"

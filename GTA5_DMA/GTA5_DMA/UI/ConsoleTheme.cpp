@@ -263,6 +263,11 @@ bool ConsoleTheme::ToggleRow(const char* id, const char* label, const char* desc
 
 bool ConsoleTheme::NavItem(const char* label, bool selected)
 {
+    return NavItem(label, selected, false);
+}
+
+bool ConsoleTheme::NavItem(const char* label, bool selected, bool slim)
+{
     const ImVec2 start = ImGui::GetCursorScreenPos();
     const float width = ImGui::GetContentRegionAvail().x;
     const float height = 36.0f;
@@ -282,7 +287,19 @@ bool ConsoleTheme::NavItem(const char* label, bool selected)
     }
 
     const ImU32 labelColor = selected ? ImGui::GetColorU32(ImGuiCol_Text) : ImGui::GetColorU32(ImGuiCol_TextDisabled);
-    drawList->AddText(ImVec2(start.x + 14.0f, start.y + (height - ImGui::GetTextLineHeight()) * 0.5f), labelColor, label);
+    if (slim)
+    {
+        // 图标模式：首字符（或单字母）居中显示
+        const char icon[2] = { label[0], '\0' };
+        const ImVec2 iconSize = ImGui::CalcTextSize(icon);
+        drawList->AddText(ImVec2(start.x + (width - iconSize.x) * 0.5f, start.y + (height - iconSize.y) * 0.5f), labelColor, icon);
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("%s", label);
+    }
+    else
+    {
+        drawList->AddText(ImVec2(start.x + 14.0f, start.y + (height - ImGui::GetTextLineHeight()) * 0.5f), labelColor, label);
+    }
     return pressed;
 }
 

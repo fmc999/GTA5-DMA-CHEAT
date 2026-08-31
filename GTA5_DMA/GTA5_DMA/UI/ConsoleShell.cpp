@@ -10,12 +10,15 @@
 #include "InputManager.h"
 #include "MenuManager.h"
 #include "Offsets.h"
+#include "UiToast.h"
+#include "WindowState.h"
 
 #include <cstdio>
 
 namespace
 {
 constexpr float kSidebarWidth    = 190.0f;
+constexpr float kSidebarSlim     = 56.0f;   // 折态宽度（仅图标）
 constexpr float kHeaderHeight    = 54.0f;
 constexpr float kStatusBarHeight = 30.0f;
 
@@ -77,43 +80,67 @@ float HeaderPill(float rightX, float y, const char* label, const char* value, bo
     return min.x - 10.0f;
 }
 
-void RenderQuickToggle(const char* id, const char* label, bool* value)
+void RenderQuickControls(bool slim)
 {
-    ConsoleTheme::ToggleRow(id, label, nullptr, value);
-}
-
-void RenderQuickControls()
-{
-    ImGui::TextDisabled("快速控制");
-    ImGui::Dummy(ImVec2(0.0f, 4.0f));
+    if (!slim)
+    {
+        ImGui::TextDisabled("快速控制");
+        ImGui::Dummy(ImVec2(0.0f, 4.0f));
+    }
 
     bool playerGod = GodMode::bPlayerGodMode.load();
     if (ConsoleTheme::ToggleRow("quick_player_god", "玩家无敌", nullptr, &playerGod)) {
         GodMode::bPlayerGodMode.store(playerGod);
         GodMode::bRequestedGodmode.store(true);
+        WindowState::QuickGodMode = playerGod;
+        UiToast::Show(playerGod ? "已开启 玩家无敌" : "已关闭 玩家无敌",
+                      playerGod ? ToastKind::Success : ToastKind::Info);
     }
-    RenderQuickToggle("quick_no_wanted", "永不通缉", &NoWanted::bEnable);
+    bool noWanted = NoWanted::bEnable;
+    if (ConsoleTheme::ToggleRow("quick_no_wanted", "永不通缉", nullptr, &noWanted)) {
+        NoWanted::bEnable = noWanted;
+        WindowState::QuickNoWanted = noWanted;
+        UiToast::Show(noWanted ? "已开启 永不通缉" : "已关闭 永不通缉",
+                      noWanted ? ToastKind::Success : ToastKind::Info);
+    }
     bool invisible = Invisibility::bInvisibility.load();
     if (ConsoleTheme::ToggleRow("quick_invisible", "隐身", nullptr, &invisible)) {
         Invisibility::bInvisibility.store(invisible);
+        WindowState::QuickInvisible = invisible;
+        UiToast::Show(invisible ? "已开启 隐身" : "已关闭 隐身",
+                      invisible ? ToastKind::Success : ToastKind::Info);
     }
-    RenderQuickToggle("quick_collision", "无碰撞", &NoCollision::bNoCollisionUI);
+    bool noCollision = NoCollision::bNoCollisionUI;
+    if (ConsoleTheme::ToggleRow("quick_collision", "无碰撞", nullptr, &noCollision)) {
+        NoCollision::bNoCollisionUI = noCollision;
+        WindowState::QuickNoCollision = noCollision;
+        UiToast::Show(noCollision ? "已开启 无碰撞" : "已关闭 无碰撞",
+                      noCollision ? ToastKind::Success : ToastKind::Info);
+    }
 }
 
-void RenderNavigation(MenuManager& menu)
+void RenderNavigation(MenuManager& menu, bool slim)
 {
     MenuPage current = menu.GetCurrentPage();
     if (current == MenuPage::MAIN) current = MenuPage::PLAYER;
 
-    ImGui::TextDisabled("功能模块");
-    ImGui::Dummy(ImVec2(0.0f, 4.0f));
-    if (ConsoleTheme::NavItem("人物控制", current == MenuPage::PLAYER))   menu.SetCurrentPage(MenuPage::PLAYER);
-    if (ConsoleTheme::NavItem("载具编辑", current == MenuPage::VEHICLE))  menu.SetCurrentPage(MenuPage::VEHICLE);
-    if (ConsoleTheme::NavItem("武器功能", current == MenuPage::WEAPON))   menu.SetCurrentPage(MenuPage::WEAPON);
-    if (ConsoleTheme::NavItem("战局玩家", current == MenuPage::SESSION))  menu.SetCurrentPage(MenuPage::SESSION);
-    if (ConsoleTheme::NavItem("位置传送", current == MenuPage::TELEPORT)) menu.SetCurrentPage(MenuPage::TELEPORT);
-    // DISABLED: 时间控制 / 任务分红导航入口 retained（实现见 Attic/LegacyPages.cpp）。
-    if (ConsoleTheme::NavItem("系统设置", current == MenuPage::SETTINGS)) menu.SetCurrentPage(MenuPage::SETTINGS);
+    if (!slim)
+        ImGui::TextDisabled("功能模块");
+
+    struct NavEntry { const char* label; const char* icon; MenuPage page; };
+    const NavEntry entries[] = {
+        { "人物控制", "P", MenuPage::PLAYER },
+        { "载具编辑", "V", MenuPage::VEHICLE },
+        { "武器功能", "W", MenuPage::WEAPON },
+        { "战局玩家", "S", MenuPage::SESSION },
+        { "位置传送", "T", MenuPage::TELEPORT },
+        { "系统设置", "G", MenuPage::SETTINGS },
+    };
+    for (const NavEntry& e : entries)
+    {
+        if (ConsoleTheme::NavItem(e.label, current == e.page, slim))
+            menu.SetCurrentPage(e.page);
+    }
 }
 
 void RenderStatusHeader()
@@ -174,8 +201,6 @@ void RenderPage(MenuManager& menu)
     case MenuPage::TELEPORT: menu.RenderTeleportPageContent(); break;
     case MenuPage::SESSION:  menu.RenderSessionPageContent(); break;
     // DISABLED: 时间 / 任务分红路由 retained for later restoration。
-    // case MenuPage::TIME: menu.RenderTimePageContent(); break;
-    // case MenuPage::HEIST_DIVIDEND: menu.RenderHeistDividendPageContent(); break;
     case MenuPage::SETTINGS: menu.RenderSettingsPageContent(); break;
     default: break;
     }
@@ -202,24 +227,45 @@ void ConsoleShell::Render(MenuManager& menu)
 
     const ImVec2 avail = ImGui::GetContentRegionAvail();
     const float bodyHeight = avail.y - kStatusBarHeight - ImGui::GetStyle().ItemSpacing.y;
+    const bool slim = WindowState::SidebarCollapsed;
+    const float sidebarWidth = slim ? kSidebarSlim : kSidebarWidth;
 
     // ---- 侧边栏 ----
-    ImGui::BeginChild("##sidebar", ImVec2(kSidebarWidth, bodyHeight), ImGuiChildFlags_None, ImGuiWindowFlags_NoScrollbar);
-    ImGui::SetCursorPos(ImVec2(14.0f, 14.0f));
+    ImGui::BeginChild("##sidebar", ImVec2(sidebarWidth, bodyHeight), ImGuiChildFlags_None, ImGuiWindowFlags_NoScrollbar);
+    ImGui::SetCursorPos(ImVec2(slim ? 12.0f : 14.0f, 14.0f));
     ImGui::BeginGroup();
-    RenderQuickControls();
+    if (!slim)
+        RenderQuickControls(false);
+
+    // 折叠/展开按钮
     ImGui::Dummy(ImVec2(0.0f, 8.0f));
-    ImGui::Separator();
-    ImGui::Dummy(ImVec2(0.0f, 8.0f));
-    RenderNavigation(menu);
+    if (ConsoleTheme::NavItem(slim ? ">>" : "<<  收起", false))
+    {
+        WindowState::SidebarCollapsed = !WindowState::SidebarCollapsed;
+    }
+
+    if (!slim)
+    {
+        ImGui::Dummy(ImVec2(0.0f, 8.0f));
+        ImGui::Separator();
+        ImGui::Dummy(ImVec2(0.0f, 8.0f));
+        RenderNavigation(menu, false);
+    }
+    else
+    {
+        RenderNavigation(menu, true);
+    }
     ImGui::EndGroup();
 
     // 侧边栏底部版本信息
-    const float afterY = ImGui::GetCursorPosY();
-    const float bottomY = ImGui::GetWindowHeight() - 26.0f;
-    if (bottomY > afterY) {
-        ImGui::SetCursorPos(ImVec2(14.0f, bottomY));
-        ImGui::TextDisabled("v2.0 · 重构版");
+    if (!slim)
+    {
+        const float afterY = ImGui::GetCursorPosY();
+        const float bottomY = ImGui::GetWindowHeight() - 26.0f;
+        if (bottomY > afterY) {
+            ImGui::SetCursorPos(ImVec2(14.0f, bottomY));
+            ImGui::TextDisabled("v2.2 · 重构版");
+        }
     }
     ImGui::EndChild();
 
@@ -234,7 +280,10 @@ void ConsoleShell::Render(MenuManager& menu)
     if (AppFonts::Bold) ImGui::PushFont(AppFonts::Bold);
     ImGui::TextColored(ConsoleTheme::Accent(), "%s", PageTitle(menu.GetCurrentPage()));
     if (AppFonts::Bold) ImGui::PopFont();
-    ImGui::TextDisabled("%s", PageDescription(menu.GetCurrentPage()));
+    if (!slim)
+    {
+        ImGui::TextDisabled("%s", PageDescription(menu.GetCurrentPage()));
+    }
     ImGui::Dummy(ImVec2(0.0f, 4.0f));
     {
         const ImVec2 line = ImGui::GetCursorScreenPos();
@@ -255,6 +304,9 @@ void ConsoleShell::Render(MenuManager& menu)
     ImGui::SameLine(ImGui::GetWindowWidth() - 250.0f);
     ImGui::TextDisabled("INS 显隐 · F5 标点 · F6 任务点 · END 退出");
     ImGui::EndChild();
+
+    // ---- Toast 通知（最上层）----
+    UiToast::Render();
 
     ImGui::End();
 }

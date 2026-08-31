@@ -38,6 +38,7 @@ namespace Offsets
 		static const uintptr_t LocalScriptsPtr_Enhanced = 0;
 	static const uintptr_t GTAPlusPtr_Enhanced = 0;
 	static const uintptr_t PedPoolPtr_Enhanced = 0;
+	static const uintptr_t VehiclePoolPtr_Enhanced = 0;   // fwVehiclePool*** (非加密三重指针)
 	static const uintptr_t PlayerMgrPtr_Original = 0x02603908;
 	static const uintptr_t AimCPedPtr_Original = 0x0206D600;
 
@@ -52,6 +53,7 @@ namespace Offsets
 		extern uintptr_t LocalScriptsPtr;    // 本地脚本指针
 	extern uintptr_t GTAPlusPtr;         // GTA+ 状态
 	extern uintptr_t PedPoolPtr;          // Ped 池加密指针（YimMenu 特征码，指向 PoolEncryption）
+	extern uintptr_t VehiclePoolPtr;      // 载具池指针（YimMenu 特征码，fwVehiclePool***）
 	
 	// 根据包名设置偏移量和游戏类型
 	inline void SetOffsetsByPackageName(const std::string& packageName)
@@ -68,6 +70,7 @@ namespace Offsets
 			LocalScriptsPtr = LocalScriptsPtr_Enhanced;
 			GTAPlusPtr = GTAPlusPtr_Enhanced;
 			PedPoolPtr = PedPoolPtr_Enhanced;
+			VehiclePoolPtr = VehiclePoolPtr_Enhanced;
 			currentGameType = GameType::GTA5_Enhanced;
 		}
 		else if (packageName == "GTA5.exe")

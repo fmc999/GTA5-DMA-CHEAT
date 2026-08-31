@@ -12,6 +12,7 @@
 #include "NoCollision.h"
 #include "NoWanted.h"
 #include "PlayerList.h"
+#include "VehicleList.h"
 #include "PlayerSpeed.h"
 #include "RefreshHealth.h"
 #include "Teleport.h"
@@ -19,8 +20,11 @@
 #include "WeaponInspector.h"
 
 #include "DMA.h"
+#include "UiToast.h"
+#include "WindowState.h"
 
 #include <cstdio>
+#include <string>
 
 // 注：旧版独立窗口页面（主菜单 / 时间控制 / 任务分红等）已从活动 UI 移除，
 // 其实现代码 retained 在 Attic/LegacyPages.cpp 中，恢复导航后可重新接入。
@@ -56,20 +60,16 @@ void MenuManager::RenderCurrentPage()
 
 void MenuManager::RenderPlayerPageContent()
 {
-    if (ImGui::BeginTable("##player_metrics", 3, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingStretchProp)) {
-        ImGui::TableNextColumn();
-        ImGui::TextDisabled("生命值");
+    {
+        char hp[16], ar[16], mdl[16];
+        std::snprintf(hp, sizeof(hp), "%.0f", HealthManager::currentHealth);
+        std::snprintf(ar, sizeof(ar), "%.0f", ArmorManager::currentArmor);
+        std::snprintf(mdl, sizeof(mdl), "0x%08X", DMA::LocalPlayerModelHash);
+        ConsoleTheme::StatPill("生命", hp, HealthManager::currentHealth > 30.0f);
         ImGui::SameLine();
-        ImGui::Text("%.0f", HealthManager::currentHealth);
-        ImGui::TableNextColumn();
-        ImGui::TextDisabled("防弹衣");
+        ConsoleTheme::StatPill("防弹衣", ar, ArmorManager::currentArmor > 0.0f);
         ImGui::SameLine();
-        ImGui::Text("%.0f", ArmorManager::currentArmor);
-        ImGui::TableNextColumn();
-        ImGui::TextDisabled("人物模型");
-        ImGui::SameLine();
-        ImGui::Text("0x%08X", DMA::LocalPlayerModelHash);
-        ImGui::EndTable();
+        ConsoleTheme::StatPill("人物模型", mdl, true);
     }
     ImGui::Dummy(ImVec2(0.0f, 8.0f));
 
@@ -171,6 +171,72 @@ void MenuManager::RenderTeleportPageContent()
 void MenuManager::RenderVehiclePageContent()
 {
     VehicleEditor::RenderContent();
+
+    ImGui::Dummy(ImVec2(0.0f, 12.0f));
+
+    // 战局载具：默认折叠（主区是载具编辑），展开后显示池扫描表
+    static bool showSessionVehicles = false;
+    ConsoleTheme::SectionHeader("战局载具", showSessionVehicles ? "点击标题收起" : "实时扫描载具池，点击展开");
+    if (ConsoleTheme::NavItem(showSessionVehicles ? "收起  ∧" : "展开  ∨", false))
+    {
+        showSessionVehicles = !showSessionVehicles;
+    }
+    if (!showSessionVehicles)
+        return;
+
+    const std::vector<SessionVehicle> vehicles = VehicleList::GetSnapshot();
+    if (vehicles.empty())
+    {
+        ImGui::TextDisabled("载具池未激活（需进入游戏并成功解析 VehiclePoolPtr）");
+        return;
+    }
+
+    ImGui::TextDisabled("50 米内载具: %d 辆（超出不显示）", (int)vehicles.size());
+    ImGui::Dummy(ImVec2(0.0f, 4.0f));
+
+    const ImGuiTableFlags flags =
+        ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV |
+        ImGuiTableFlags_ScrollY | ImGuiTableFlags_SizingStretchProp;
+    const float tableHeight = 240.0f;
+    if (ImGui::BeginTable("##session_vehicles", 5, flags, ImVec2(0.0f, tableHeight)))
+    {
+        ImGui::TableSetupScrollFreeze(0, 1);
+        ImGui::TableSetupColumn("序号", ImGuiTableColumnFlags_WidthFixed, 44.0f);
+        ImGui::TableSetupColumn("载具", ImGuiTableColumnFlags_WidthFixed, 130.0f);
+        ImGui::TableSetupColumn("血量", ImGuiTableColumnFlags_WidthFixed, 70.0f);
+        ImGui::TableSetupColumn("距离", ImGuiTableColumnFlags_WidthFixed, 90.0f);
+        ImGui::TableSetupColumn("操作", ImGuiTableColumnFlags_WidthFixed, 110.0f);
+        ImGui::TableHeadersRow();
+
+        int row = 0;
+        for (const SessionVehicle& v : vehicles)
+        {
+            ImGui::TableNextRow();
+            ImGui::PushID(row);
+
+            ImGui::TableNextColumn();
+            ImGui::TextUnformatted(std::to_string(v.DisplayIndex).c_str());
+            ImGui::TableNextColumn();
+            if (v.ModelName[0] != '\0')
+                ImGui::TextUnformatted(v.ModelName);
+            else
+                ImGui::Text("0x%08X", v.ModelHash);
+            ImGui::TableNextColumn();
+            ImGui::Text("%.0f", v.Health);
+            ImGui::TableNextColumn();
+            ImGui::Text("%.0f m", v.DistanceM);
+            ImGui::TableNextColumn();
+            if (ImGui::Button("传送到身边"))
+            {
+                VehicleList::RequestTeleportVehicle(v.Address);
+                UiToast::Show("载具传送请求已发送（仅静止载具有效）", ToastKind::Info);
+            }
+
+            ImGui::PopID();
+            ++row;
+        }
+        ImGui::EndTable();
+    }
 }
 
 /* ---------- 战局玩家 ---------- */
@@ -185,9 +251,36 @@ void MenuManager::RenderSessionPageContent()
         return;
     }
 
-    const std::vector<SessionPlayer> players = PlayerList::GetSnapshot();
+    std::vector<SessionPlayer> players = PlayerList::GetSnapshot();
 
     ConsoleTheme::SectionHeader("战局玩家", "点击行选中玩家");
+
+    // 搜索过滤（名称子串，不区分大小写）
+    static char search[32] = "";
+    ImGui::SetNextItemWidth(220.0f);
+    ImGui::InputTextWithHint("##player_search", "搜索玩家…", search, sizeof(search));
+    ImGui::SameLine();
+    ImGui::TextDisabled("%zu 人", players.size());
+    if (search[0] != '\0')
+    {
+        const std::string needle(search);
+        std::string lower;
+        lower.reserve(needle.size());
+        for (char c : needle)
+            lower.push_back(static_cast<char>(::tolower(static_cast<unsigned char>(c))));
+        std::vector<SessionPlayer> filtered;
+        filtered.reserve(players.size());
+        for (const auto& p : players)
+        {
+            std::string nameLower(p.Name);
+            for (char& c : nameLower)
+                c = static_cast<char>(::tolower(static_cast<unsigned char>(c)));
+            if (nameLower.find(lower) != std::string::npos)
+                filtered.push_back(p);
+        }
+        players = std::move(filtered);
+    }
+    ImGui::Dummy(ImVec2(0.0f, 4.0f));
 
     // 玩家表格
     static int selectedIndex = -1;
@@ -195,7 +288,9 @@ void MenuManager::RenderSessionPageContent()
         ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV |
         ImGuiTableFlags_ScrollY | ImGuiTableFlags_SizingStretchProp;
 
-    const float tableHeight = ImGui::GetContentRegionAvail().y - 130.0f;
+    // 表格高度：详情区约 150px；窗口太小时保底 160px，避免布局挤爆
+    float tableHeight = ImGui::GetContentRegionAvail().y - 150.0f;
+    if (tableHeight < 160.0f) tableHeight = 160.0f;
     if (ImGui::BeginTable("##session_players", 9, flags, ImVec2(0.0f, tableHeight)))
     {
         ImGui::TableSetupScrollFreeze(0, 1);
@@ -322,6 +417,7 @@ void MenuManager::RenderSessionPageContent()
     if (ImGui::Button("传送到此玩家", ImVec2(150.0f, 0.0f)))
     {
         PlayerList::RequestTeleportTo(selected.PlayerIndex);
+        UiToast::Show(std::string("传送 → ") + selected.Name, ToastKind::Success);
     }
     ImGui::SameLine();
     ImGui::TextDisabled("把本地玩家传送到目标位置（错开 2 米防卡模）");
@@ -334,6 +430,7 @@ void MenuManager::RenderSessionPageContent()
     if (ImGui::Button("击杀 (血量清零)", ImVec2(150.0f, 0.0f)))
     {
         PlayerList::RequestKill(selected.PlayerIndex);
+        UiToast::Show(std::string("已请求击杀 ") + selected.Name, ToastKind::Danger);
     }
     ImGui::PopStyleColor(3);
     ImGui::SameLine();
@@ -344,8 +441,9 @@ void MenuManager::RenderSessionPageContent()
 
 void MenuManager::RenderSettingsPageContent()
 {
-    ConsoleTheme::SectionHeader("界面主题", "切换控制台配色方案");
+    ConsoleTheme::SectionHeader("界面主题", "切换控制台配色方案（自动保存）");
     ConsoleTheme::RenderThemeSelector();
+    WindowState::ThemeIndex = static_cast<int>(ConsoleTheme::GetTheme());
 
     ImGui::Dummy(ImVec2(0.0f, 10.0f));
     ConsoleTheme::SectionHeader("战局玩家", "玩家加入/离开日志");

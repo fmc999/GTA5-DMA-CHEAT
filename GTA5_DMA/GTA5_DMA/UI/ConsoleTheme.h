@@ -34,6 +34,7 @@ public:
     static void SectionHeader(const char* title, const char* description = nullptr);
     static bool ToggleRow(const char* id, const char* label, const char* description, bool* value);
     static bool NavItem(const char* label, bool selected);
+    static bool NavItem(const char* label, bool selected, bool slim);   // slim: 图标模式
     static void StatPill(const char* label, const char* value, bool good);
     static void StatusDot(bool ok, const char* label);
 };

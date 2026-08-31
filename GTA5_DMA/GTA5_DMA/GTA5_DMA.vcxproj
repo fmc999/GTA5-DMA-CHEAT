@@ -197,10 +197,12 @@
     <ClCompile Include="Features\VehicleEditor.cpp" />
     <ClCompile Include="Features\WeaponInspector.cpp" />
     <ClCompile Include="Features\PlayerList.cpp" />
+    <ClCompile Include="Features\VehicleList.cpp" />
     <ClCompile Include="UI\MyImGui.cpp" />
-    <ClCompile Include="UI\MyMenu.cpp" />
     <ClCompile Include="UI\ConsoleShell.cpp" />
     <ClCompile Include="UI\ConsoleTheme.cpp" />
+    <ClCompile Include="UI\UiToast.cpp" />
+    <ClCompile Include="UI\WindowState.cpp" />
     <ClCompile Include="UI\MenuManager.cpp" />
     <ClCompile Include="Attic\TimeControl.cpp" />
     <ClCompile Include="Attic\HeistDividend.cpp" />
@@ -243,10 +245,13 @@
     <ClInclude Include="Features\VehicleEditor.h" />
     <ClInclude Include="Features\WeaponInspector.h" />
     <ClInclude Include="Features\PlayerList.h" />
+    <ClInclude Include="Features\VehicleList.h" />
     <ClInclude Include="UI\MyImGui.h" />
     <ClInclude Include="UI\MyMenu.h" />
     <ClInclude Include="UI\ConsoleShell.h" />
     <ClInclude Include="UI\ConsoleTheme.h" />
+    <ClInclude Include="UI\UiToast.h" />
+    <ClInclude Include="UI\WindowState.h" />
     <ClInclude Include="UI\MenuManager.h" />
     <ClInclude Include="UI\AppFonts.h" />
     <ClInclude Include="Attic\TimeControl.h" />

@@ -6,10 +6,15 @@
 #include "ConsoleTheme.h"
 #include "InputManager.h"
 #include "MyMenu.h"
+#include "MenuManager.h"
 #include "Teleport.h"
+#include "UiToast.h"
+#include "WindowState.h"
 
 #include <d3d11.h>
 #include <dwmapi.h>
+
+HWND g_AppHwnd = nullptr;   // 窗口句柄全局（WindowState 持久化用）
 
 #pragma comment(lib, "d3d11.lib")
 #pragma comment(lib, "dwmapi.lib")
@@ -95,6 +100,10 @@ LRESULT WINAPI MyImGui::WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
         mmi->ptMinTrackSize.y = 640;
         return 0;
     }
+    case WM_CLOSE:
+        WindowState::Save();   // 窗口销毁前持久化几何
+        ::DestroyWindow(hWnd);
+        return 0;
     case WM_DESTROY:
         ::PostQuitMessage(0);
         return 0;
@@ -109,13 +118,21 @@ bool MyImGui::Initialize()
     wc = { sizeof(wc), CS_CLASSDC, WndProc, 0L, 0L, GetModuleHandle(nullptr), nullptr, nullptr, nullptr, nullptr, L"GTA5_DMA_Tool", nullptr };
     ::RegisterClassExW(&wc);
 
-    constexpr int windowWidth = 1280;
-    constexpr int windowHeight = 820;
-    const int posX = (GetSystemMetrics(SM_CXSCREEN) - windowWidth) / 2;
-    const int posY = (GetSystemMetrics(SM_CYSCREEN) - windowHeight) / 2;
+    WindowState::Load();
+
+    const int windowWidth = WindowState::Width;
+    const int windowHeight = WindowState::Height;
+    int posX = (GetSystemMetrics(SM_CXSCREEN) - windowWidth) / 2;
+    int posY = (GetSystemMetrics(SM_CYSCREEN) - windowHeight) / 2;
+    if (WindowState::X != -1 && WindowState::Y != -1)
+    {
+        posX = WindowState::X;
+        posY = WindowState::Y;
+    }
     hwnd = ::CreateWindowExW(0, wc.lpszClassName, L"GTA5 DMA 控制台", WS_OVERLAPPEDWINDOW,
         posX, posY, windowWidth, windowHeight, nullptr, nullptr, wc.hInstance, nullptr);
 
+    g_AppHwnd = hwnd;
     if (!CreateDeviceD3D(hwnd))
     {
         CleanupDeviceD3D();
@@ -128,7 +145,7 @@ bool MyImGui::Initialize()
     if (FAILED(DwmSetWindowAttribute(hwnd, 20, &darkMode, sizeof(darkMode))))
         DwmSetWindowAttribute(hwnd, 19, &darkMode, sizeof(darkMode));
 
-    ::ShowWindow(hwnd, SW_SHOW);
+    ::ShowWindow(hwnd, WindowState::Maximized ? SW_SHOWMAXIMIZED : SW_SHOW);
     ::UpdateWindow(hwnd);
 
     // ImGui 上下文
@@ -162,7 +179,8 @@ bool MyImGui::Initialize()
     if (!AppFonts::Bold)
         AppFonts::Bold = AppFonts::Regular;
 
-    // 主题 + 后端
+    // 主题 + 后端（恢复上次主题）
+    ConsoleTheme::SetTheme(static_cast<ConsoleThemeId>(WindowState::ThemeIndex));
     ConsoleTheme::Apply();
     ImGui_ImplWin32_Init(hwnd);
     ImGui_ImplDX11_Init(g_pd3dDevice, g_pd3dDeviceContext);
@@ -173,6 +191,7 @@ bool MyImGui::Initialize()
 
 bool MyImGui::Close()
 {
+    WindowState::Save();
     ImGui_ImplDX11_Shutdown();
     ImGui_ImplWin32_Shutdown();
     ImGui::DestroyContext();
@@ -247,7 +266,30 @@ bool MyImGui::OnFrame()
 
     // ---- 菜单渲染 ----
     if (MyMenu::bMenuVisible) {
-        MyMenu::Render();
+        MenuManager::GetInstance().RenderCurrentPage();
+    }
+
+    // ---- 窗口几何持久化（每帧采样，开销可忽略）----
+    {
+        {
+            WINDOWPLACEMENT wp = { sizeof(WINDOWPLACEMENT) };
+            if (::GetWindowPlacement(hwnd, &wp))
+            {
+                if (wp.showCmd == SW_SHOWMAXIMIZED || wp.showCmd == SW_SHOWMINIMIZED)
+                {
+                    WindowState::Maximized = (wp.showCmd == SW_SHOWMAXIMIZED);
+                }
+                else
+                {
+                    WindowState::Maximized = false;
+                    WindowState::X = wp.rcNormalPosition.left;
+                    WindowState::Y = wp.rcNormalPosition.top;
+                    WindowState::Width = wp.rcNormalPosition.right - wp.rcNormalPosition.left;
+                    WindowState::Height = wp.rcNormalPosition.bottom - wp.rcNormalPosition.top;
+                    WindowState::ThemeIndex = static_cast<int>(ConsoleTheme::GetTheme());
+                }
+            }
+        }
     }
 
     // ---- 呈现 ----

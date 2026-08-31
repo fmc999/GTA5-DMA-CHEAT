@@ -337,7 +337,7 @@ int main()
     assert(fallbackForOutsideTarget.value == 0x443D1E8);
 
     const auto enhancedCatalog = OffsetResolver::GetCatalog(GameType::GTA5_Enhanced);
-    assert(enhancedCatalog.size() == 9);
+    assert(enhancedCatalog.size() == 10);
     assert(enhancedCatalog[0].name == "WorldPtr");
     assert(enhancedCatalog[0].pattern == "48 8B 0D ?? ?? ?? ?? 48 85 C9 74 ?? 48 8B 49 ?? 48 8D");
     assert(enhancedCatalog[1].name == "GlobalPtr");
@@ -356,6 +356,8 @@ int main()
     assert(enhancedCatalog[7].pattern == "48 8D 15 ? ? ? ? 41 B8 18 02 00 00 E8");
     assert(enhancedCatalog[8].name == "PedPoolPtr");
     assert(enhancedCatalog[8].pattern == "80 79 4B 00 0F 84 F5 00 00 00 48 89 F1");
+    assert(enhancedCatalog[9].name == "VehiclePoolPtr");
+    assert(enhancedCatalog[9].pattern == "48 8B 05 ? ? ? ? ?? ?? ?? 48 83 78 18 0D");
     assert(OffsetResolver::GetCatalog(GameType::GTA5).empty());
 
     return 0;

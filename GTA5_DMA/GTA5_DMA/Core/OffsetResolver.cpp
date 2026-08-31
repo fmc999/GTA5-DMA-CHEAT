@@ -33,7 +33,8 @@ namespace
         {"GTAPlusPtr", "48 8D 15 ? ? ? ? 41 B8 18 02 00 00 E8", 3, 7},
         // YimMenuV2 的 Ped 池加密指针（现代实现，跟版本维护）
         // 命中后: match + 0x18 + 3 处 RIP 相对 -> PoolEncryption*
-        {"PedPoolPtr", "80 79 4B 00 0F 84 F5 00 00 00 48 89 F1", 0x1B, 0x1F}
+        {"PedPoolPtr", "80 79 4B 00 0F 84 F5 00 00 00 48 89 F1", 0x1B, 0x1F},
+        {"VehiclePoolPtr", "48 8B 05 ? ? ? ? ?? ?? ?? 48 83 78 18 0D", 0x3, 0x7},
     };
 }
 
