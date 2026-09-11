@@ -199,6 +199,7 @@
     <ClCompile Include="Features\PlayerList.cpp" />
     <ClCompile Include="Features\VehicleList.cpp" />
     <ClCompile Include="UI\MyImGui.cpp" />
+    <ClCompile Include="UI\Backdrop.cpp" />
     <ClCompile Include="UI\ConsoleShell.cpp" />
     <ClCompile Include="UI\ConsoleTheme.cpp" />
     <ClCompile Include="UI\UiToast.cpp" />
@@ -247,6 +248,9 @@
     <ClInclude Include="Features\PlayerList.h" />
     <ClInclude Include="Features\VehicleList.h" />
     <ClInclude Include="UI\MyImGui.h" />
+    <ClInclude Include="UI\Backdrop.h" />
+    <ClInclude Include="UI\EmbeddedAssets.h" />
+    <ClInclude Include="UI\GlyphRanges.h" />
     <ClInclude Include="UI\MyMenu.h" />
     <ClInclude Include="UI\ConsoleShell.h" />
     <ClInclude Include="UI\ConsoleTheme.h" />

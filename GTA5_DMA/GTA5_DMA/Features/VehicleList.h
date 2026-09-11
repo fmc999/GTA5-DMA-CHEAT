@@ -42,11 +42,13 @@ public:
     // 刷车（DMA 线程消费）：把指定载具传送到本地玩家身边
     // modelHash=0 表示"最近的一辆"
     static void RequestSpawn(uint32_t modelHash);
-    static void RequestTeleportVehicle(uintptr_t vehicleAddress);   // 指定载具传送到身边
+    static void RequestTeleportVehicle(uintptr_t vehicleAddress);   // 指定载具传送到身边（载具 → 我）
+    static void RequestTeleportToVehicle(uintptr_t vehicleAddress); // 我 → 指定载具（传送到它）
 
 private:
     static void RefreshVehicles();
     static void TeleportVehicleToPlayer(uintptr_t vehicleAddress);
+    static void TeleportPlayerToVehicle(uintptr_t vehicleAddress);
 
     // 内置常见载具哈希 → 显示名（完整表太大，只放常用的）
     static const char* LookupModelName(uint32_t hash);

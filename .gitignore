@@ -46,3 +46,6 @@ _commit_msg.txt
 _backup*/
 _ui_*
 _release_stage/
+
+# local UI-port scratch (patch scripts, diffs, verification notes, screenshots)
+_uiwork/

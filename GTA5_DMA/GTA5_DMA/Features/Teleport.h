@@ -10,7 +10,7 @@ public:
 	static bool RequestObjectiveTeleport();
 
 public:
-	static inline bool bEnable = false;
+	static inline bool bEnable = true;   // 直接可用：UI 不再提供总开关
 	static inline bool bRequestedTeleport = false;
 	static inline Vec3 StartingLocation = { 0.0f,0.0f,0.0f };
 	static inline Vec3 DesiredLocation = { 0.0f,0.0f,0.0f };

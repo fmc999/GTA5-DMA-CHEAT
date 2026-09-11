@@ -22,6 +22,12 @@ public:
     static inline int  Width = 1280, Height = 820;
     static inline bool Maximized = false;
 
+    // ---- 悬浮窗（ImGui 面板）几何：0 = 用 layout::panel_w / panel_h 默认值 ----
+    static inline float PanelW = 0.0f;
+    static inline float PanelH = 0.0f;
+    static inline float PanelOffsetX = 0.0f;   // 相对窗口居中位置的拖动偏移
+    static inline float PanelOffsetY = 0.0f;
+
     // ---- 布局选项 ----
     static inline bool SidebarCollapsed = false; // 折叠侧边栏（扩大工作区）
 
@@ -33,6 +39,7 @@ public:
 
     // ---- 主题 ----
     static inline int ThemeIndex = 0;
+    static inline int AccentIndex = 0;
 
 private:
     static std::string IniPath();

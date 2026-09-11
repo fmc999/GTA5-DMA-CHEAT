@@ -20,6 +20,7 @@ namespace
 
     std::atomic<uint32_t> g_PendingSpawnModel{ 0 };
     std::atomic<uintptr_t> g_PendingTeleportFull{ 0 };
+    std::atomic<uintptr_t> g_PendingTeleportToVehicle{ 0 };   // 我 → 载具
 
     constexpr auto kRefreshInterval = std::chrono::milliseconds(700);
     std::chrono::steady_clock::time_point g_LastRefresh{};
@@ -176,6 +177,11 @@ void VehicleList::OnDMAFrame()
     if (pendingAddr)
         TeleportVehicleToPlayer(pendingAddr);
 
+    // 我 → 载具（立即处理）
+    const uintptr_t pendingToVehicle = g_PendingTeleportToVehicle.exchange(0);
+    if (pendingToVehicle)
+        TeleportPlayerToVehicle(pendingToVehicle);
+
     const uint32_t pendingModel = g_PendingSpawnModel.exchange(0);
     if (pendingModel)
     {
@@ -224,6 +230,69 @@ void VehicleList::TeleportVehicleToPlayer(uintptr_t vehicleAddress)
         return;
     }
     std::println("[VehicleList] 已传送载具 0x{:X} 到身边", vehicleAddress);
+}
+
+void VehicleList::RequestTeleportToVehicle(uintptr_t vehicleAddress)
+{
+    if (vehicleAddress == 0)
+        return;
+    g_PendingTeleportToVehicle.store(vehicleAddress);
+}
+
+void VehicleList::TeleportPlayerToVehicle(uintptr_t vehicleAddress)
+{
+    // 我 → 它：把本地玩家的导航位置写到目标载具所在处。
+    // 写入链与 PlayerList::TeleportToPlayer 一致（本地玩家 CNavigation+0x50；
+    // 若我正坐在载具里，同时写载具导航位置，否则人会掉在车外）。
+    if (DMA::NavigationAddress == 0)
+        return;
+
+    const auto& me = DMA::LocalPlayerLocation;
+    if (me.x == 0.0f && me.y == 0.0f)
+        return;   // 自己的坐标还没读到，别往 (0,0,0) 传
+
+    // 目标坐标：优先实时读该载具 CNavigation+0x50，读不到再退回本轮快照
+    Vec3 target = {};
+    uintptr_t nav = 0;
+    if (DMA::Memory().Read(vehicleAddress + offsetof(CVehicle, pCNavigation), &nav, sizeof(nav)) && nav)
+        DMA::Memory().Read(nav + 0x50, &target, sizeof(target));
+
+    if (target.x == 0.0f && target.y == 0.0f && target.z == 0.0f)
+    {
+        auto snapshot = GetSnapshot();
+        for (const SessionVehicle& v : snapshot)
+        {
+            if (v.Address == vehicleAddress)
+            {
+                target = { v.Position[0], v.Position[1], v.Position[2] };
+                break;
+            }
+        }
+    }
+
+    if (target.x == 0.0f && target.y == 0.0f && target.z == 0.0f)
+    {
+        std::println("[VehicleList] 传送到它失败: 载具坐标读不到 0x{:X}", vehicleAddress);
+        return;
+    }
+
+    // 错开 2 米防卡模（与玩家传送同一约定）
+    target.x += 2.0f;
+    target.y += 2.0f;
+
+    if (!DMA::Memory().Write(DMA::NavigationAddress + offsetof(CNavigation, Position), &target, sizeof(target)))
+    {
+        std::println("[VehicleList] 传送到它失败: 玩家导航位置写入失败");
+        return;
+    }
+    if (DMA::VehicleNavigationAddress != 0)
+    {
+        DMA::Memory().Write(
+            DMA::VehicleNavigationAddress + offsetof(CNavigation, Position), &target, sizeof(target));
+    }
+
+    std::println("[VehicleList] 已把玩家传送到载具 0x{:X} -> ({:.1f}, {:.1f}, {:.1f})",
+                 vehicleAddress, target.x, target.y, target.z);
 }
 
 std::vector<SessionVehicle> VehicleList::GetSnapshot()

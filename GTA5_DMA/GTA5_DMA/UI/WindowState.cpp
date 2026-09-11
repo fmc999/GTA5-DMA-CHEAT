@@ -2,6 +2,7 @@
 
 #include "WindowState.h"
 #include "MyImGui.h"
+#include "ConsoleTheme.h"
 
 #include <shlobj.h>
 
@@ -37,13 +38,26 @@ void WindowState::Load()
         else if (key == "quick_invis") QuickInvisible = (value != 0);
         else if (key == "quick_noclip") QuickNoCollision = (value != 0);
         else if (key == "theme") ThemeIndex = static_cast<int>(value);
+        else if (key == "accent") AccentIndex = static_cast<int>(value);
+        else if (key == "panel_w") PanelW = static_cast<float>(value);
+        else if (key == "panel_h") PanelH = static_cast<float>(value);
+        else if (key == "panel_ox") PanelOffsetX = static_cast<float>(value);
+        else if (key == "panel_oy") PanelOffsetY = static_cast<float>(value);
     }
 
     // 有效性钳制
     if (Width < 960) Width = 960;
     if (Height < 640) Height = 640;
+    if (ThemeIndex < 0 || ThemeIndex >= kConsoleThemeCount) ThemeIndex = 0;
+    if (AccentIndex < 0 || AccentIndex >= kAccentCount) AccentIndex = 0;
     if (X != -1 && (X < -200 || X > 16000)) { X = -1; Y = -1; }
     if (Y != -1 && (Y < -200 || Y > 16000)) { X = -1; Y = -1; }
+
+    // 悬浮窗几何的有效性钳制（脏数据一律回落到默认值）
+    if (PanelW != 0.0f && (PanelW < layout::panel_min_w || PanelW > 8000.0f)) PanelW = 0.0f;
+    if (PanelH != 0.0f && (PanelH < layout::panel_min_h || PanelH > 8000.0f)) PanelH = 0.0f;
+    if (PanelOffsetX < -8000.0f || PanelOffsetX > 8000.0f) { PanelOffsetX = 0.0f; PanelOffsetY = 0.0f; }
+    if (PanelOffsetY < -8000.0f || PanelOffsetY > 8000.0f) { PanelOffsetX = 0.0f; PanelOffsetY = 0.0f; }
 }
 
 void WindowState::Save()
@@ -86,4 +100,9 @@ void WindowState::Save()
     out << "quick_invis " << (QuickInvisible ? 1 : 0) << "\n";
     out << "quick_noclip " << (QuickNoCollision ? 1 : 0) << "\n";
     out << "theme " << ThemeIndex << "\n";
+    out << "accent " << AccentIndex << "\n";
+    out << "panel_w " << static_cast<int>(WindowState::PanelW + 0.5f) << "\n";
+    out << "panel_h " << static_cast<int>(WindowState::PanelH + 0.5f) << "\n";
+    out << "panel_ox " << static_cast<int>(WindowState::PanelOffsetX) << "\n";
+    out << "panel_oy " << static_cast<int>(WindowState::PanelOffsetY) << "\n";
 }

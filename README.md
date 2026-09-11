@@ -8,7 +8,7 @@
 [![DMA](https://img.shields.io/badge/DMA-MemProcFS%20%2F%20FPGA-8A2BE2)](https://github.com/ufrisk/MemProcFS)
 [![Build](https://github.com/fmc999/GTA5-DMA-CHEAT/actions/workflows/msbuild.yml/badge.svg)](https://github.com/fmc999/GTA5-DMA-CHEAT/actions/workflows/msbuild.yml)
 [![License: Custom](https://img.shields.io/badge/license-Custom%20Non--Commercial-orange)](LICENSE)
-[![Release](https://img.shields.io/badge/release-v2.3-2ea44f)](https://github.com/fmc999/GTA5-DMA-CHEAT/releases/latest)
+[![Release](https://img.shields.io/badge/release-v2.5-2ea44f)](https://github.com/fmc999/GTA5-DMA-CHEAT/releases/latest)
 
 基于 C++23 / Dear ImGui / DirectX 11 / MemProcFS 构建的 GTA5 DMA 外部控制台，支持 GTA5 原版与 GTA5 Enhanced 双进程自动识别。
 
@@ -47,8 +47,8 @@ Single-window console layout: header status pills (DMA / process / hotkeys / FPS
 
 ### 战局载具 | Session Vehicles ⭐
 - YimMenuV2 载具池（`fwVehiclePool`）实时扫描，50 米半径过滤
-- 车名（24 款常用车型映射）/ 血量 / 距离；一键传送到身边（仅对静止载具有效）
-- Live `fwVehiclePool` scanning with a 50 m radius filter; model name (24 common models mapped), health, distance; one-click teleport-to-player (stationary vehicles only).
+- 车名（24 款常用车型映射）/ 血量 / 距离；一键传送到它（把玩家直接送到该载具旁，错开 2 米防卡模）
+- Live `fwVehiclePool` scanning with a 50 m radius filter; model name (24 common models mapped), health, distance; one-click teleport-to-vehicle (sends the player next to that vehicle, offset by 2 m to avoid clipping).
 
 ### 人物控制 | Player
 - 玩家无敌与载具无敌（持续状态保护）

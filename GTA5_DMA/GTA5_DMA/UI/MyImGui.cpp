@@ -3,7 +3,10 @@
 #include "MyImGui.h"
 #include "AppFonts.h"
 #include "AppRuntime.h"
+#include "Backdrop.h"
 #include "ConsoleTheme.h"
+#include "EmbeddedAssets.h"
+#include "GlyphRanges.h"
 #include "InputManager.h"
 #include "MyMenu.h"
 #include "MenuManager.h"
@@ -13,6 +16,52 @@
 
 #include <d3d11.h>
 #include <dwmapi.h>
+
+// ---- 字形自检：找出「字符集里有、图集里却没装进去」的码点 ----
+// 图集 4096x4096 满了之后 ImGui 会静默丢字形，界面表现就是某个字变 '?'，很难定位。
+// 启动时把缺字清单写到工作目录 glyph_check.txt；没有缺字就把文件删掉（正常情况看不到）。
+static void DumpGlyphCheck()
+{
+    ImGuiIO& io = ImGui::GetIO();
+    struct Entry { const char* name; ImFont* font; const ImWchar* ranges; };
+    const Entry entries[] = {
+        { "Small   (15px)", AppFonts::Small,   glyph_ranges::ui },
+        { "Regular (18px)", AppFonts::Regular, glyph_ranges::ui },
+        { "Bold    (18px)", AppFonts::Bold,    glyph_ranges::ui },
+        { "Title   (23px)", AppFonts::Title,   glyph_ranges::ui },
+        { "Logo    (26px)", AppFonts::Logo,    io.Fonts->GetGlyphRangesDefault() },
+    };
+    FILE* f = nullptr;
+    if (fopen_s(&f, "glyph_check.txt", "w") != 0 || !f)
+        return;
+    // CJK 缺字才是真问题：那说明图集满了、ImGui 把字形丢了（界面显示 '?'）。
+    // 非 CJK 缺字多为「区间覆盖到但字体本身没有」的块（空白字符等），不影响界面。
+    int totalCjk = 0, totalOther = 0;
+    for (const Entry& e : entries) {
+        if (!e.font) continue;
+        int cjk = 0, other = 0;
+        std::string list;
+        for (int i = 0; e.ranges[i]; i += 2)
+            for (ImWchar c = e.ranges[i]; c <= e.ranges[i + 1] && c != 0; ++c)
+                if (!e.font->FindGlyphNoFallback(c)) {
+                    const bool isCjk = (c >= 0x2E80 && c <= 0x9FFF) || (c >= 0xF900 && c <= 0xFAFF);
+                    if (isCjk) {
+                        ++cjk;
+                        if (list.size() < 900) { char buf[32]; sprintf_s(buf, sizeof(buf), "U+%04X %s ", (unsigned)c, ""); list += buf; }
+                    } else {
+                        ++other;
+                    }
+                }
+        fprintf(f, "%s  字形数=%d  CJK缺字=%d  其他缺字=%d\n  %s\n",
+                e.name, e.font->Glyphs.Size, cjk, other, list.c_str());
+        totalCjk += cjk; totalOther += other;
+    }
+    fprintf(f, "合计 CJK缺字=%d  其他缺字=%d\n", totalCjk, totalOther);
+    fclose(f);
+    if (totalCjk == 0)
+        remove("glyph_check.txt");
+}
+
 
 HWND g_AppHwnd = nullptr;   // 窗口句柄全局（WindowState 持久化用）
 
@@ -121,7 +170,13 @@ bool MyImGui::Initialize()
     WindowState::Load();
 
     const int windowWidth = WindowState::Width;
-    const int windowHeight = WindowState::Height;
+    // 武器页/设置页内容较高：窗口太矮时工作区会把最后一行裁掉半个，这里保证一个能放下整页的最小高度（再夹到桌面工作区）。
+    int windowHeight = WindowState::Height;
+    {
+        const int workH = GetSystemMetrics(SM_CYSCREEN) - 80;
+        if (windowHeight < 900 && workH >= 900) windowHeight = 900;
+        if (windowHeight > workH) windowHeight = workH;
+    }
     int posX = (GetSystemMetrics(SM_CXSCREEN) - windowWidth) / 2;
     int posY = (GetSystemMetrics(SM_CYSCREEN) - windowHeight) / 2;
     if (WindowState::X != -1 && WindowState::Y != -1)
@@ -155,8 +210,22 @@ bool MyImGui::Initialize()
     (void)io;
     // 注：不启用 NavEnableKeyboard，避免占用全局按键（热键需要穿透）
 
-    // 字体：常规 + 粗体，中文全字形
-    const ImWchar* glyphRanges = io.Fonts->GetGlyphRangesChineseFull();
+    // 字体：小号 + 常规 + 粗体 + 大标题 + 字标
+    // 图集预算是硬约束：ImGui 图集装不下时会「静默丢字形」，界面表现就是某些字变 '?'。
+    // 早前 Regular 用中文全字形(20902 字) + 默认 3x 过采样，像素需求远超 4096x4096，
+    // 于是 Small/Bold/Title 的行尾字形被丢掉 —— 用户看到的 '?' 就是这么来的。
+    // 现在：① 所有字号统一用源码精确字符集（tools/gen_glyph_ranges.py 生成，~2300 码点）
+    //       ② 过采样降到 1x（CJK 15~23px 下无可见差别，像素需求降到 1/3）
+    //       ③ 显式指定 4096 宽，避免在小尺寸上反复重打包
+    // 合计约 4.5M 像素，稳定落在 16.7M 预算内。
+    const ImWchar* uiRanges = glyph_ranges::ui;
+    io.Fonts->TexDesiredWidth = 4096;
+
+    ImFontConfig fontCfg;
+    fontCfg.OversampleH = 1;
+    fontCfg.OversampleV = 1;
+    fontCfg.PixelSnapH = true;
+
     const char* regularPaths[] = {
         "C:/Windows/Fonts/msyh.ttc",    // 微软雅黑
         "C:/Windows/Fonts/simhei.ttf",  // 黑体
@@ -166,25 +235,52 @@ bool MyImGui::Initialize()
         "C:/Windows/Fonts/msyhbd.ttc",  // 微软雅黑 粗体
         "C:/Windows/Fonts/simhei.ttf",
     };
-    for (const char* path : regularPaths) {
-        AppFonts::Regular = io.Fonts->AddFontFromFileTTF(path, 18.0f, nullptr, glyphRanges);
-        if (AppFonts::Regular) break;
-    }
+    auto addUiFont = [&](const char* const* paths, int count, float size) -> ImFont* {
+        for (int i = 0; i < count; ++i) {
+            ImFont* f = io.Fonts->AddFontFromFileTTF(paths[i], size, &fontCfg, uiRanges);
+            if (f) return f;
+        }
+        return nullptr;
+    };
+    AppFonts::Small   = addUiFont(regularPaths, 3, 15.0f);
+    AppFonts::Regular = addUiFont(regularPaths, 3, 18.0f);
     if (!AppFonts::Regular)
         AppFonts::Regular = io.Fonts->AddFontDefault();
-    for (const char* path : boldPaths) {
-        AppFonts::Bold = io.Fonts->AddFontFromFileTTF(path, 18.0f, nullptr, glyphRanges);
-        if (AppFonts::Bold) break;
-    }
+    if (!AppFonts::Small)
+        AppFonts::Small = AppFonts::Regular;
+    AppFonts::Bold = addUiFont(boldPaths, 2, 18.0f);
     if (!AppFonts::Bold)
         AppFonts::Bold = AppFonts::Regular;
+    AppFonts::Title = addUiFont(boldPaths, 2, 23.0f);
+    if (!AppFonts::Title)
+        AppFonts::Title = AppFonts::Bold;
+
+    // 字标字体（Zen Dots，仅拉丁字形，编译进二进制）；缺失时回退粗体
+    if (embedded_assets::logo_ttf_size > 0) {
+        ImFontConfig logoConfig;
+        logoConfig.FontDataOwnedByAtlas = false;   // 指向只读静态数据，禁止 atlas 释放
+        AppFonts::Logo = io.Fonts->AddFontFromMemoryTTF(
+            const_cast<unsigned char*>(embedded_assets::logo_ttf),
+            static_cast<int>(embedded_assets::logo_ttf_size), 26.0f, &logoConfig);
+    }
+    if (!AppFonts::Logo)
+        AppFonts::Logo = AppFonts::Bold;
 
     // 主题 + 后端（恢复上次主题）
     ConsoleTheme::SetTheme(static_cast<ConsoleThemeId>(WindowState::ThemeIndex));
+    ConsoleTheme::SetAccent(static_cast<AccentId>(WindowState::AccentIndex));
     ConsoleTheme::Apply();
     ImGui_ImplWin32_Init(hwnd);
     ImGui_ImplDX11_Init(g_pd3dDevice, g_pd3dDeviceContext);
-    io.Fonts->Build();
+    Backdrop::Init(g_pd3dDevice);   // Portfolio #8 毛玻璃背景（缺失时外壳回退纯色）
+    if (!io.Fonts->Build())
+        std::cerr << "[UI] font atlas build failed" << std::endl;
+
+    // 字体图集已在上面 Build() 完成，这里立刻做一次缺字自检
+    if (AppFonts::Regular && AppFonts::Small)
+        DumpGlyphCheck();
+
+
 
     return 1;
 }
@@ -192,6 +288,7 @@ bool MyImGui::Initialize()
 bool MyImGui::Close()
 {
     WindowState::Save();
+    Backdrop::Shutdown();
     ImGui_ImplDX11_Shutdown();
     ImGui_ImplWin32_Shutdown();
     ImGui::DestroyContext();
@@ -287,6 +384,7 @@ bool MyImGui::OnFrame()
                     WindowState::Width = wp.rcNormalPosition.right - wp.rcNormalPosition.left;
                     WindowState::Height = wp.rcNormalPosition.bottom - wp.rcNormalPosition.top;
                     WindowState::ThemeIndex = static_cast<int>(ConsoleTheme::GetTheme());
+                    WindowState::AccentIndex = static_cast<int>(ConsoleTheme::GetAccent());
                 }
             }
         }

@@ -176,42 +176,24 @@ bool VehicleEditor::RenderContent() {
     // 使用标签页组织功能模块
     if (ImGui::BeginTabBar("VehicleTabs", ImGuiTabBarFlags_None)) {
         // 载具信息标签页
-        if (ImGui::BeginTabItem("载具信息")) {
+        const bool tabOpen1 = ImGui::BeginTabItem("载具信息");
+        {
+            const ImVec2 tmin = ImGui::GetItemRectMin();
+            const ImVec2 tmax = ImGui::GetItemRectMax();
+            char tbuf[128];
+            snprintf(tbuf, sizeof(tbuf), "TAB 载具信息 %.0f %.0f %.0f %.0f", tmin.x, tmin.y, tmax.x, tmax.y);
+            ConsoleTheme::TraceNote(tbuf);
+        }
+        if (tabOpen1) {
             const bool hasVehicle = DMA::VehicleAddress != 0;
 
-            // 当前载具信息
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.90f, 0.90f, 0.90f, 1.0f));
-            ImGui::Text("当前载具属性");
-            ImGui::PopStyleColor();
-            ImGui::Spacing();
-            
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.80f, 0.80f, 0.80f, 1.0f));
-            
-            // 使用两列布局显示属性
-            ImGui::Columns(2, NULL, false);
-            ImGui::Text("加速度: %.2f", currentAcceleration);
-            ImGui::Text("质量: %.2f", currentMass);
-            ImGui::Text("载具血量: %.2f / %.2f", currentVehicleHealth, currentVehicleMaxHealth);
-            ImGui::Text("引擎血量: %.2f", currentEngineHealth);
-            ImGui::NextColumn();
-            ImGui::Text("车辆健康: %.2f", currentVehicleHealthAlt);
-            ImGui::Text("车身健康: %.2f", currentBodyHealth);
-            ImGui::Text("油箱健康: %.2f", currentTankHealth);
-            ImGui::Text("降落伞状态: %s", currentParachuteStatus ? "开启" : "关闭");
-            
-            // 显示当前功能模式
-            int currentAddonMode = vehicleAddonMode;
             const char* modeText = "未知";
-            switch(currentAddonMode) {
+            switch (vehicleAddonMode) {
                 case 0: modeText = "默认"; break;
                 case 40: modeText = "跳跃"; break;
                 case 66: modeText = "加速"; break;
                 case 96: modeText = "跳跃+加速"; break;
             }
-            ImGui::Text("功能模式: %s", modeText);
-
-            ImGui::Columns(1);
-
             const char* vehicleStateText = "未知";
             switch (currentVehicleState) {
                 case 0: vehicleStateText = "玩家载具"; break;
@@ -219,472 +201,377 @@ bool VehicleEditor::RenderContent() {
                 case 2: vehicleStateText = "玩家载具（状态2）"; break;
                 case 3: vehicleStateText = "已毁坏"; break;
             }
+            char va[80] = {};
+            char vb[80] = {};
 
-            ImGui::Spacing();
-            if (hasVehicle) {
-                if (ImGui::BeginTable("vehicle_identity_table", 2, ImGuiTableFlags_SizingStretchSame)) {
-                    ImGui::TableNextRow();
-                    ImGui::TableNextColumn();
-                    ImGui::Text("载具模型: 0x%08X", currentVehicleModelHash);
-                    ImGui::TableNextColumn();
-                    ImGui::Text("实体哈希: 0x%08X", currentVehicleEntityModelHash);
+            // ── 2 列卡片：左列 当前载具属性 / 载具操作 ｜ 右列 载具标识与弹药 / 修改载具属性 ──
+            // 原来每张卡各占一整行、右半边空着 —— 这里按列并排，卡片内容一字未改。
+            ConsoleTheme::Columns col;
+            col.Begin(2);
 
-                    ImGui::TableNextRow();
-                    ImGui::TableNextColumn();
-                    ImGui::Text("载具状态: %s (%u)", vehicleStateText, static_cast<unsigned int>(currentVehicleState));
-                    ImGui::TableNextColumn();
-                    ImGui::Text("冻结状态: %s (%u)", currentVehicleFreezeFlag ? "开启" : "关闭",
-                        static_cast<unsigned int>(currentVehicleFreezeFlag));
+            col.Place(0);
+            ConsoleTheme::BoxBegin("veh_stats", 5, "当前载具属性", col.width);
+            snprintf(va, sizeof(va), "%.2f", currentAcceleration);
+            snprintf(vb, sizeof(vb), "%.2f", currentMass);
+            ConsoleTheme::TextRow2("加速度", va, true, "质量", vb, true);
+            snprintf(va, sizeof(va), "%.2f / %.2f", currentVehicleHealth, currentVehicleMaxHealth);
+            snprintf(vb, sizeof(vb), "%.2f", currentEngineHealth);
+            ConsoleTheme::TextRow2("载具血量", va, true, "引擎血量", vb, true);
+            snprintf(va, sizeof(va), "%.2f", currentVehicleHealthAlt);
+            snprintf(vb, sizeof(vb), "%.2f", currentBodyHealth);
+            ConsoleTheme::TextRow2("车辆健康", va, true, "车身健康", vb, true);
+            snprintf(va, sizeof(va), "%.2f", currentTankHealth);
+            ConsoleTheme::TextRow2("油箱健康", va, true, "降落伞状态", currentParachuteStatus ? "开启" : "关闭", true);
+            ConsoleTheme::TextRow2("功能模式", modeText, true, "载具状态", vehicleStateText, false);
+            ConsoleTheme::BoxEnd();
+            col.Advance(0, ConsoleTheme::TitledBoxHeight(5));
 
-                    ImGui::TableNextRow();
-                    ImGui::TableNextColumn();
-                    ImGui::Text("当前载具武器弹药: %u", static_cast<unsigned int>(currentVehicleWeaponAmmo));
-                    ImGui::EndTable();
-                }
-            } else {
-                ImGui::TextDisabled("未在载具中");
-                ImGui::TextDisabled("当前载具武器弹药: --");
-            }
-
-            ImGui::PopStyleColor();
-
-            ImGui::Spacing();
+            col.Place(0);
+            ConsoleTheme::BoxBeginPixels("veh_ops", layout::box_height(2) + 45.0f, "载具操作", col.width);
             if (!hasVehicle)
                 ImGui::BeginDisabled();
-
-            bool freezeVehicle = bFreezeVehicle;
-            if (ImGui::Checkbox("冻结当前载具##freeze_vehicle", &freezeVehicle)) {
-                if (SetVehicleFrozen(freezeVehicle))
-                    bFreezeVehicle = freezeVehicle;
+            {
+                bool freezeVehicle = bFreezeVehicle;
+                if (ConsoleTheme::ToggleRow("##freeze_vehicle", "冻结当前载具", "锁定载具位置与物理模拟", &freezeVehicle)) {
+                    if (SetVehicleFrozen(freezeVehicle))
+                        bFreezeVehicle = freezeVehicle;
+                }
+                float ammoF = static_cast<float>(desiredVehicleWeaponAmmo);
+                if (ConsoleTheme::InputRow("##veh_ammo", "目标载具武器弹药", &ammoF, "%.0f")) {
+                    int v = static_cast<int>(ammoF + 0.5f);
+                    desiredVehicleWeaponAmmo = v < 0 ? 0 : (v > 255 ? 255 : v);
+                }
+                if (ConsoleTheme::ButtonRow("应用弹药数值", UiIcon::Check, true))
+                    SetVehicleWeaponAmmo(static_cast<uint8_t>(desiredVehicleWeaponAmmo));
             }
-
-            ImGui::SetNextItemWidth(150.0f);
-            if (ImGui::InputInt("目标载具武器弹药##target_vehicle_weapon_ammo", &desiredVehicleWeaponAmmo, 1, 10)) {
-                if (desiredVehicleWeaponAmmo < 0)
-                    desiredVehicleWeaponAmmo = 0;
-                else if (desiredVehicleWeaponAmmo > 255)
-                    desiredVehicleWeaponAmmo = 255;
-            }
-            ImGui::SameLine();
-            if (ImGui::Button("应用##apply_vehicle_weapon_ammo"))
-                SetVehicleWeaponAmmo(static_cast<uint8_t>(desiredVehicleWeaponAmmo));
-
             if (!hasVehicle)
                 ImGui::EndDisabled();
+            ConsoleTheme::BoxEnd();
+            col.Advance(0, ConsoleTheme::TitledBoxPixels(layout::box_height(2) + 45.0f));
 
-            ImGui::Spacing();
-            ImGui::Separator();
-            
-            // 覆盖数值
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.90f, 0.90f, 0.90f, 1.0f));
-            ImGui::Text("修改载具属性");
-            ImGui::PopStyleColor();
-            ImGui::Spacing();
-            
-            ImGui::InputFloat("加速度##acceleration", &desiredAcceleration, 0.1f, 1.0f, "%.2f");
-            ImGui::InputFloat("质量##mass", &desiredMass, 50.0f, 500.0f, "%.0f");
-            
-            // 按钮行
-            ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8, 4));
-            if (ImGui::Button("更新##update_values", ImVec2(ImGui::GetContentRegionAvail().x * 0.45f, 0))) {
+            col.Place(1);
+            ConsoleTheme::BoxBegin("veh_id", 3, "载具标识与弹药", col.width);
+            if (hasVehicle) {
+                snprintf(va, sizeof(va), "0x%08X", (unsigned)currentVehicleModelHash);
+                snprintf(vb, sizeof(vb), "0x%08X", (unsigned)currentVehicleEntityModelHash);
+            } else {
+                snprintf(va, sizeof(va), "%s", "--");
+                snprintf(vb, sizeof(vb), "%s", "--");
+            }
+            ConsoleTheme::TextRow2("载具模型", va, hasVehicle, "实体哈希", vb, hasVehicle);
+            snprintf(va, sizeof(va), "%s", hasVehicle ? vehicleStateText : "--");
+            snprintf(vb, sizeof(vb), "%s", hasVehicle ? (currentVehicleFreezeFlag ? "已冻结" : "未冻结") : "--");
+            ConsoleTheme::TextRow2("载具状态", va, hasVehicle, "冻结状态", vb, hasVehicle);
+            if (hasVehicle)
+                snprintf(va, sizeof(va), "%u", (unsigned)currentVehicleWeaponAmmo);
+            else
+                snprintf(va, sizeof(va), "%s", "--");
+            ConsoleTheme::TextRow2("当前载具武器弹药", va, hasVehicle, "", "", hasVehicle, false);
+            ConsoleTheme::BoxEnd();
+            col.Advance(1, ConsoleTheme::TitledBoxHeight(3));
+
+            col.Place(1);
+            ConsoleTheme::BoxBeginPixels("veh_edit", layout::box_height(2) + 90.0f, "修改载具属性", col.width);
+            ConsoleTheme::InputRow("##veh_acc", "加速度", &desiredAcceleration, "%.2f");
+            ConsoleTheme::InputRow("##veh_mass", "质量", &desiredMass, "%.0f");
+            if (ConsoleTheme::ButtonRow("更新", UiIcon::Refresh, true))
                 bNeedsOverwrite = true;
-            }
-            ImGui::SameLine();
-            if (ImGui::Button("复制当前到目标##copy_current", ImVec2(ImGui::GetContentRegionAvail().x, 0))) {
+            if (ConsoleTheme::ButtonRow("复制当前到目标", UiIcon::Folder, false))
                 bRequestedCopyToDesired = true;
-            }
-            ImGui::PopStyleVar();
-            
+            ConsoleTheme::BoxEnd();
+            col.Advance(1, ConsoleTheme::TitledBoxPixels(layout::box_height(2) + 90.0f));
+
+            col.End();
+
             ImGui::EndTabItem();
         }
+
         
         // 飞行与跳跃标签页
-        if (ImGui::BeginTabItem("飞行与跳跃")) {
-            // 喷气功能
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.90f, 0.90f, 0.90f, 1.0f));
-            ImGui::Text("喷气功能");
-            ImGui::PopStyleColor();
-            ImGui::Spacing();
-            
-            ImGui::Text("喷气充能进度: %.2f", currentJetCharge);
-            bool infiniteJet = bInfiniteJet;
-            if (ImGui::Checkbox("锁定无限喷气##infinite_jet", &infiniteJet)) {
-                bInfiniteJet = infiniteJet;
-                if (infiniteJet) {
-                    SetJetChargeValue(1.25f);
-                }
-            }
-            
-            ImGui::Text("喷气恢复速度: %.2f", currentJetRecoverySpeed);
-            bool lockJetRecoverySpeed = bLockJetRecoverySpeed;
-            if (ImGui::Checkbox("锁定喷气恢复速度##lock_jet_recovery", &lockJetRecoverySpeed)) {
-                bLockJetRecoverySpeed = lockJetRecoverySpeed;
-                if (lockJetRecoverySpeed) {
-                    SetJetRecoverySpeedValue(5.0f);
-                }
-            }
-            
-            ImGui::Spacing();
-            ImGui::Separator();
-            ImGui::Spacing();
-            
-            // 跳跃恢复
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.90f, 0.90f, 0.90f, 1.0f));
-            ImGui::Text("跳跃恢复");
-            ImGui::PopStyleColor();
-            ImGui::Spacing();
-            
-            ImGui::Text("当前恢复速度: %.2f##current_jump_recovery", currentJumpRecoverySpeed);
-            bool lockJumpRecoverySpeed = bLockJumpRecoverySpeed;
-            if (ImGui::Checkbox("锁定恢复速度##lock_jump_recovery", &lockJumpRecoverySpeed)) {
-                bLockJumpRecoverySpeed = lockJumpRecoverySpeed;
-            }
-            
-            ImGui::EndTabItem();
+        const bool tabOpen2 = ImGui::BeginTabItem("飞行·修复");
+        {
+            const ImVec2 tmin = ImGui::GetItemRectMin();
+            const ImVec2 tmax = ImGui::GetItemRectMax();
+            char tbuf[128];
+            snprintf(tbuf, sizeof(tbuf), "TAB 飞行·修复 %.0f %.0f %.0f %.0f", tmin.x, tmin.y, tmax.x, tmax.y);
+            ConsoleTheme::TraceNote(tbuf);
         }
-        
-        // 附加功能标签页
-        if (ImGui::BeginTabItem("附加功能")) {
-            // 载具附加功能模式选择
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.90f, 0.90f, 0.90f, 1.0f));
-            ImGui::Text("载具附加功能");
-            ImGui::PopStyleColor();
-            ImGui::Spacing();
-            
-            int addonMode = vehicleAddonMode;
-            int selectedMode = 0;
-            if (addonMode == 0) selectedMode = 0;
-            else if (addonMode == 40) selectedMode = 1;
-            else if (addonMode == 66) selectedMode = 2;
-            else if (addonMode == 96) selectedMode = 3;
-            
-            const char* addonItems[] = { "默认(0)", "跳跃(40)", "加速(66)", "二者都(96)" };
-            if (ImGui::Combo("附加功能模式", &selectedMode, addonItems, 4)) {
-                int actualValue = 0;
-                switch(selectedMode) {
-                    case 0: actualValue = 0; break;
-                    case 1: actualValue = 40; break;
-                    case 2: actualValue = 66; break;
-                    case 3: actualValue = 96; break;
-                }
-                vehicleAddonMode = actualValue;
-                if (bVehicleAddonApply) {
-                    SetVehicleAddon(actualValue);
-                }
-            }
-            
-            bool autoApply = bVehicleAddonApply;
-            if (ImGui::Checkbox("立即生效##auto_apply_addon", &autoApply)) {
-                bVehicleAddonApply = autoApply;
-                if (autoApply) {
-                    SetVehicleAddon(addonMode);
-                }
-            }
-            
-            if (ImGui::Button("点击应用##apply_addon")) {
-                SetVehicleAddon(addonMode);
-            }
-            
-            ImGui::Spacing();
-            ImGui::Separator();
-            ImGui::Spacing();
-            
-            // 降落伞
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.90f, 0.90f, 0.90f, 1.0f));
-            ImGui::Text("降落伞设置");
-            ImGui::PopStyleColor();
-            ImGui::Spacing();
-            
-            bool parachuteEnabled = bParachuteEnabled;
-            if (ImGui::Checkbox("降落伞开关##parachute_toggle", &parachuteEnabled)) {
-                bParachuteEnabled = parachuteEnabled;
-                SetParachute(parachuteEnabled);
-            }
-            
-            ImGui::Spacing();
-            ImGui::Separator();
-            ImGui::Spacing();
-            
-            // 安全带
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.90f, 0.90f, 0.90f, 1.0f));
-            ImGui::Text("安全带设置");
-            ImGui::PopStyleColor();
-            ImGui::Spacing();
-            
-            int seatBeltMode = bSeatBeltEnabled ? 1 : 0;
-            const char* seatBeltOptions[] = { "关闭", "开启" };
-            if (ImGui::Combo("安全带模式##seat_belt_combo", &seatBeltMode, seatBeltOptions, IM_ARRAYSIZE(seatBeltOptions))) {
-                bSeatBeltEnabled = seatBeltMode == 1;
-                SetSeatBelt(bSeatBeltEnabled);
-            }
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.60f, 0.60f, 0.60f, 0.90f));
-            ImGui::TextWrapped("开启后将根据载具类型设置安全带值：普通载具201，摩托车0");
-            ImGui::PopStyleColor();
-            
-            ImGui::EndTabItem();
-        }
-        
-        // 修复功能标签页
-        if (ImGui::BeginTabItem("修复功能")) {
-            // 载具修复
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.90f, 0.90f, 0.90f, 1.0f));
-            ImGui::Text("载具修复选项");
-            ImGui::PopStyleColor();
-            ImGui::Spacing();
-            
-            ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8, 4));
-            if (ImGui::Button("一键修复##repair_all", ImVec2(ImGui::GetContentRegionAvail().x * 0.45f, 0))) {
-                bRepairTriggered = true;
-            }
-            ImGui::SameLine();
-            bool autoRepair = bAutoRepair;
-            if (ImGui::Checkbox("自动修复##auto_repair", &autoRepair)) {
-                bAutoRepair = autoRepair;
-            }
-            ImGui::PopStyleVar();
-            
-            ImGui::Spacing();
-            ImGui::Separator();
-            ImGui::Spacing();
-            
-            // 载具外观修复
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.90f, 0.90f, 0.90f, 1.0f));
-            ImGui::Text("外观修复");
-            ImGui::PopStyleColor();
-            ImGui::Spacing();
-            
-            bool vehicleRepair18 = bVehicleRepair18;
-            if (ImGui::Checkbox("载具外观修复##vehicle_repair_18", &vehicleRepair18)) {
-                bVehicleRepair18 = vehicleRepair18;
-            }
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.60f, 0.60f, 0.60f, 1.0f));
-            ImGui::TextWrapped("启用后将持续执行载具外观修复操作");
-            ImGui::PopStyleColor();
-            
-            ImGui::EndTabItem();
-        }
-        
-        // 导弹功能标签页
-        if (ImGui::BeginTabItem("导弹功能")) {
-            // 导弹功能
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.90f, 0.90f, 0.90f, 1.0f));
-            ImGui::Text("导弹属性设置");
-            ImGui::PopStyleColor();
-            ImGui::Spacing();
-            
-            // 显示当前导弹锁定范围和有效距离
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.80f, 0.80f, 0.80f, 1.0f));
-            ImGui::Text("当前导弹属性");
-            ImGui::Text("锁定范围: %.2f##current_lock_range", currentLockOnRange);
-            ImGui::Text("有效距离: %.2f##current_weapon_range", currentWeaponRange);
-            ImGui::PopStyleColor();
-            
-            ImGui::Spacing();
-            
-            // 导弹功能启用开关
-            bool enableMissileMods = bEnableMissileMods;
-            if (ImGui::Checkbox("启用导弹功能##enable_missile_mods", &enableMissileMods)) {
-                bEnableMissileMods = enableMissileMods;
-            }
-            
-            // 当导弹功能启用时，显示输入框和应用选项
-            if (bEnableMissileMods) {
-                ImGui::Spacing();
-                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.90f, 0.90f, 0.90f, 1.0f));
-                ImGui::Text("修改导弹属性");
-                ImGui::PopStyleColor();
-                ImGui::Spacing();
-                
-                ImGui::InputFloat("锁定范围##input_lock_range", &desiredLockOnRange, 100.0f, 500.0f, "%.0f");
-                ImGui::InputFloat("有效距离##input_weapon_range", &desiredWeaponRange, 100.0f, 500.0f, "%.0f");
-                
-                // 自动应用开关
-                bool autoApplyMissileMods = bAutoApplyMissileMods;
-                if (ImGui::Checkbox("立即生效##auto_apply_missile", &autoApplyMissileMods)) {
-                    bAutoApplyMissileMods = autoApplyMissileMods;
-                    if (autoApplyMissileMods) {
-                        SetLockOnRange(desiredLockOnRange);
-                        SetWeaponRange(desiredWeaponRange);
+        if (tabOpen2) {
+            char vbuf[64] = {};
+            char va[64] = {};
+            char vb[64] = {};
+            const float btnBlock = 45.0f;   // 一个按钮行实测占位（34px 按钮 + 行距），与布局自检对齐
+
+            // ── 2 列卡片：左列 喷气 / 跳跃恢复 / 载具附加 / 降落伞 ｜ 右列 喷气恢复 / 安全带 / 修复 / 导弹 ──
+            // 原来每张卡各占一整行、右半边空着 —— 这里按列并排，卡片内容一字未改。
+            ConsoleTheme::Columns col;
+            col.Begin(2);
+
+            col.Place(0);
+            ConsoleTheme::BoxBegin("veh_jet", 2, "喷气功能", col.width);
+            snprintf(vbuf, sizeof(vbuf), "%.2f", currentJetCharge);
+            ConsoleTheme::TextRow("喷气充能进度", vbuf, true);
+            {
+                bool infiniteJet = bInfiniteJet;
+                if (ConsoleTheme::ToggleRow("##infinite_jet", "锁定无限喷气", "开启后喷气充能锁定为 1.25", &infiniteJet, false)) {
+                    bInfiniteJet = infiniteJet;
+                    if (infiniteJet) {
+                        SetJetChargeValue(1.25f);
                     }
                 }
-                
-                // 手动应用按钮
-                if (ImGui::Button("应用导弹设置##apply_missile_settings")) {
+            }
+            ConsoleTheme::BoxEnd();
+            col.Advance(0, ConsoleTheme::TitledBoxHeight(2));
+
+            col.Place(0);
+            ConsoleTheme::BoxBegin("veh_jump_recovery", 2, "跳跃恢复", col.width);
+            snprintf(vbuf, sizeof(vbuf), "%.2f", currentJumpRecoverySpeed);
+            ConsoleTheme::TextRow("当前恢复速度", vbuf, true);
+            {
+                bool lockJumpRecoverySpeed = bLockJumpRecoverySpeed;
+                if (ConsoleTheme::ToggleRow("##lock_jump_recovery", "锁定恢复速度", "锁定后保持当前跳跃恢复速度", &lockJumpRecoverySpeed, false)) {
+                    bLockJumpRecoverySpeed = lockJumpRecoverySpeed;
+                }
+            }
+            ConsoleTheme::BoxEnd();
+            col.Advance(0, ConsoleTheme::TitledBoxHeight(2));
+
+            // 左列 · 载具附加功能（原「附加功能」标签页并入本页）
+            col.Place(0);
+            {
+                int addonMode = vehicleAddonMode;
+                int selectedMode = 0;
+                if (addonMode == 40) selectedMode = 1;
+                else if (addonMode == 66) selectedMode = 2;
+                else if (addonMode == 96) selectedMode = 3;
+                static const char* addonItems[] = { "默认(0)", "跳跃(40)", "加速(66)", "二者都(96)" };
+
+                ConsoleTheme::BoxBeginPixels("veh_addon", layout::box_height(2) + btnBlock, "载具附加功能", col.width);
+                if (ConsoleTheme::ComboRow("##addon_mode", "附加功能模式", addonItems, 4, &selectedMode, "选择载具附加能力组合")) {
+                    int actualValue = 0;
+                    switch (selectedMode) {
+                        case 0: actualValue = 0; break;
+                        case 1: actualValue = 40; break;
+                        case 2: actualValue = 66; break;
+                        case 3: actualValue = 96; break;
+                    }
+                    vehicleAddonMode = actualValue;
+                    if (bVehicleAddonApply) {
+                        SetVehicleAddon(actualValue);
+                    }
+                }
+                {
+                    bool autoApply = bVehicleAddonApply;
+                    if (ConsoleTheme::ToggleRow("##auto_apply_addon", "立即生效", "切换模式后立即写入载具", &autoApply)) {
+                        bVehicleAddonApply = autoApply;
+                        if (autoApply) {
+                            SetVehicleAddon(vehicleAddonMode);
+                        }
+                    }
+                }
+                if (ConsoleTheme::ButtonRow("点击应用", UiIcon::Check, true)) {
+                    SetVehicleAddon(vehicleAddonMode);
+                }
+                ConsoleTheme::BoxEnd();
+            }
+            col.Advance(0, ConsoleTheme::TitledBoxPixels(layout::box_height(2) + btnBlock));
+
+            col.Place(0);
+            ConsoleTheme::BoxBegin("veh_parachute", 1, "降落伞设置", col.width);
+            {
+                bool parachuteEnabled = bParachuteEnabled;
+                if (ConsoleTheme::ToggleRow("##parachute_toggle", "降落伞开关", "为载具启用降落伞能力", &parachuteEnabled, false)) {
+                    bParachuteEnabled = parachuteEnabled;
+                    SetParachute(parachuteEnabled);
+                }
+            }
+            ConsoleTheme::BoxEnd();
+            col.Advance(0, ConsoleTheme::TitledBoxHeight(1));
+
+            col.Place(1);
+            ConsoleTheme::BoxBegin("veh_jet_recovery", 2, "喷气恢复", col.width);
+            snprintf(vbuf, sizeof(vbuf), "%.2f", currentJetRecoverySpeed);
+            ConsoleTheme::TextRow("喷气恢复速度", vbuf, true);
+            {
+                bool lockJetRecoverySpeed = bLockJetRecoverySpeed;
+                if (ConsoleTheme::ToggleRow("##lock_jet_recovery", "锁定喷气恢复速度", "开启后恢复速度锁定为 5.0", &lockJetRecoverySpeed, false)) {
+                    bLockJetRecoverySpeed = lockJetRecoverySpeed;
+                    if (lockJetRecoverySpeed) {
+                        SetJetRecoverySpeedValue(5.0f);
+                    }
+                }
+            }
+            ConsoleTheme::BoxEnd();
+            col.Advance(1, ConsoleTheme::TitledBoxHeight(2));
+
+            col.Place(1);
+            ConsoleTheme::BoxBegin("veh_seatbelt", 1, "安全带设置", col.width);
+            {
+                int seatBeltMode = bSeatBeltEnabled ? 1 : 0;
+                static const char* seatBeltOptions[] = { "关闭", "开启" };
+                if (ConsoleTheme::ComboRow("##seat_belt_combo", "安全带模式", seatBeltOptions, IM_ARRAYSIZE(seatBeltOptions), &seatBeltMode,
+                                           "开启后按载具类型写入：普通载具201，摩托车0", false)) {
+                    bSeatBeltEnabled = seatBeltMode == 1;
+                    SetSeatBelt(bSeatBeltEnabled);
+                }
+            }
+            ConsoleTheme::BoxEnd();
+            col.Advance(1, ConsoleTheme::TitledBoxHeight(1));
+
+            col.Place(1);
+            ConsoleTheme::BoxBeginPixels("veh_repair", layout::box_height(1) + btnBlock, "载具修复选项", col.width);
+            if (ConsoleTheme::ButtonRow("一键修复", UiIcon::Shield, true)) {
+                bRepairTriggered = true;
+            }
+            {
+                bool autoRepair = bAutoRepair;
+                if (ConsoleTheme::ToggleRow("##auto_repair", "自动修复", "持续监测并自动修复载具", &autoRepair, false)) {
+                    bAutoRepair = autoRepair;
+                }
+            }
+            ConsoleTheme::BoxEnd();
+            col.Advance(1, ConsoleTheme::TitledBoxPixels(layout::box_height(1) + btnBlock));
+
+            col.Place(1);
+            ConsoleTheme::BoxBegin("veh_repair_skin", 1, "外观修复", col.width);
+            {
+                bool vehicleRepair18 = bVehicleRepair18;
+                if (ConsoleTheme::ToggleRow("##vehicle_repair_18", "载具外观修复", "启用后将持续执行载具外观修复操作", &vehicleRepair18, false)) {
+                    bVehicleRepair18 = vehicleRepair18;
+                }
+            }
+            ConsoleTheme::BoxEnd();
+            col.Advance(1, ConsoleTheme::TitledBoxHeight(1));
+
+            col.Place(1);
+            ConsoleTheme::BoxBegin("veh_missile_state", 2, "导弹属性设置", col.width);
+            snprintf(va, sizeof(va), "%.2f", currentLockOnRange);
+            snprintf(vb, sizeof(vb), "%.2f", currentWeaponRange);
+            ConsoleTheme::TextRow2("锁定范围", va, true, "有效距离", vb, true);
+            {
+                bool enableMissileMods = bEnableMissileMods;
+                if (ConsoleTheme::ToggleRow("##enable_missile_mods", "启用导弹功能", "解锁下方导弹属性修改", &enableMissileMods, false)) {
+                    bEnableMissileMods = enableMissileMods;
+                }
+            }
+            ConsoleTheme::BoxEnd();
+            col.Advance(1, ConsoleTheme::TitledBoxHeight(2));
+
+            // 右列 · 修改导弹属性（原「导弹功能」标签页并入本页，启用后展开）
+            if (bEnableMissileMods) {
+            col.Place(1);
+                ConsoleTheme::BoxBeginPixels("veh_missile_edit", layout::box_height(3) + btnBlock, "修改导弹属性", col.width);
+                ConsoleTheme::InputRow("##input_lock_range", "锁定范围", &desiredLockOnRange, "%.0f");
+                ConsoleTheme::InputRow("##input_weapon_range", "有效距离", &desiredWeaponRange, "%.0f");
+                {
+                    bool autoApplyMissileMods = bAutoApplyMissileMods;
+                    if (ConsoleTheme::ToggleRow("##auto_apply_missile", "立即生效", "修改后立即写入导弹属性", &autoApplyMissileMods)) {
+                        bAutoApplyMissileMods = autoApplyMissileMods;
+                        if (autoApplyMissileMods) {
+                            SetLockOnRange(desiredLockOnRange);
+                            SetWeaponRange(desiredWeaponRange);
+                        }
+                    }
+                }
+                if (ConsoleTheme::ButtonRow("应用导弹设置", UiIcon::Target, true)) {
                     SetLockOnRange(desiredLockOnRange);
                     SetWeaponRange(desiredWeaponRange);
                 }
+                ConsoleTheme::BoxEnd();
+            col.Advance(1, ConsoleTheme::TitledBoxPixels(layout::box_height(3) + btnBlock));
             }
-            
+
+            (void)btnBlock;
+            col.End();
+
             ImGui::EndTabItem();
         }
-        
-        // 操控数据标签页
-        if (ImGui::BeginTabItem("操控数据")) {
-            // 当前操控数据属性
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.90f, 0.90f, 0.90f, 1.0f));
-            ImGui::Text("当前操控数据属性");
-            ImGui::PopStyleColor();
-            ImGui::Spacing();
-            
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.80f, 0.80f, 0.80f, 1.0f));
-            
-            // 使用两列布局显示属性
-            ImGui::Columns(2, NULL, false);
-            ImGui::Text("质量: %.6f", currentMass);
-            ImGui::Text("阻力系数: %.6f", currentDragCoefficient);
-            ImGui::Text("浮力: %.6f", currentBuoyancy);
-            ImGui::Text("加速度: %.6f", currentAcceleration);
-            ImGui::Text("驱动惯性: %.6f", currentDriveInertia);
-            ImGui::Text("初始驱动力: %.6f", currentInitialDriveForce);
-            ImGui::Text("制动力: %.6f", currentBrakeForce);
-            ImGui::Text("手刹力: %.6f", currentHandbrakeForce);
-            ImGui::NextColumn();
-            ImGui::Text("牵引曲线max: %.6f", currentTractionCurveMax);
-            ImGui::Text("牵引曲线min: %.6f", currentTractionCurveMin);
-            ImGui::Text("碰撞Multi: %.6f", currentCollisionMultiplier);
-            ImGui::Text("武器Multi: %.6f", currentWeaponMultiplier);
-            ImGui::Text("变形Multi: %.6f", currentDeformationMultiplier);
-            ImGui::Text("发动机: %.6f", currentEngine);
-            ImGui::Text("推力: %.6f", currentThrust);
-            ImGui::Columns(1);
-            
-            ImGui::PopStyleColor();
-            
-            ImGui::Spacing();
-            ImGui::Separator();
-            ImGui::Spacing();
-            
-            // 修改操控数据属性
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.90f, 0.90f, 0.90f, 1.0f));
-            ImGui::Text("修改操控数据属性");
-            ImGui::PopStyleColor();
-            ImGui::Spacing();
-            
-            // 使用两列布局显示输入框和按钮
-            ImGui::Columns(2, NULL, false);
-            
-            // 第一列
-            ImGui::PushItemWidth(ImGui::GetColumnWidth() * 0.6f);
-            
-            // 质量
-            ImGui::InputFloat("质量##mass", &desiredMass, 0.0f, 0.0f, "%.0f");
-            ImGui::SameLine();
-            if (ImGui::Button("-##mass_minus", ImVec2(24, 20))) { desiredMass -= 50.0f; }
-            ImGui::SameLine();
-            if (ImGui::Button("+##mass_plus", ImVec2(24, 20))) { desiredMass += 50.0f; }
-            
-            // 阻力系数
-            ImGui::InputFloat("阻力系数##drag_coefficient", &desiredDragCoefficient, 0.0f, 0.0f, "%.6f");
-            ImGui::SameLine();
-            if (ImGui::Button("-##drag_minus", ImVec2(24, 20))) { desiredDragCoefficient -= 0.0001f; }
-            ImGui::SameLine();
-            if (ImGui::Button("+##drag_plus", ImVec2(24, 20))) { desiredDragCoefficient += 0.0001f; }
-            
-            // 浮力
-            ImGui::InputFloat("浮力##buoyancy", &desiredBuoyancy, 0.0f, 0.0f, "%.6f");
-            ImGui::SameLine();
-            if (ImGui::Button("-##buoyancy_minus", ImVec2(24, 20))) { desiredBuoyancy -= 0.1f; }
-            ImGui::SameLine();
-            if (ImGui::Button("+##buoyancy_plus", ImVec2(24, 20))) { desiredBuoyancy += 0.1f; }
-            
-            // 加速度
-            ImGui::InputFloat("加速度##acceleration", &desiredAcceleration, 0.0f, 0.0f, "%.6f");
-            ImGui::SameLine();
-            if (ImGui::Button("-##acceleration_minus", ImVec2(24, 20))) { desiredAcceleration -= 0.1f; }
-            ImGui::SameLine();
-            if (ImGui::Button("+##acceleration_plus", ImVec2(24, 20))) { desiredAcceleration += 0.1f; }
-            
-            // 驱动惯性
-            ImGui::InputFloat("驱动惯性##drive_inertia", &desiredDriveInertia, 0.0f, 0.0f, "%.6f");
-            ImGui::SameLine();
-            if (ImGui::Button("-##inertia_minus", ImVec2(24, 20))) { desiredDriveInertia -= 0.1f; }
-            ImGui::SameLine();
-            if (ImGui::Button("+##inertia_plus", ImVec2(24, 20))) { desiredDriveInertia += 0.1f; }
-            
-            // 初始驱动力
-            ImGui::InputFloat("初始驱动力##initial_drive_force", &desiredInitialDriveForce, 0.0f, 0.0f, "%.6f");
-            ImGui::SameLine();
-            if (ImGui::Button("-##drive_force_minus", ImVec2(24, 20))) { desiredInitialDriveForce -= 0.1f; }
-            ImGui::SameLine();
-            if (ImGui::Button("+##drive_force_plus", ImVec2(24, 20))) { desiredInitialDriveForce += 0.1f; }
-            
-            // 制动力
-            ImGui::InputFloat("制动力##brake_force", &desiredBrakeForce, 0.0f, 0.0f, "%.6f");
-            ImGui::SameLine();
-            if (ImGui::Button("-##brake_minus", ImVec2(24, 20))) { desiredBrakeForce -= 0.1f; }
-            ImGui::SameLine();
-            if (ImGui::Button("+##brake_plus", ImVec2(24, 20))) { desiredBrakeForce += 0.1f; }
-            
-            // 手刹力
-            ImGui::InputFloat("手刹力##handbrake_force", &desiredHandbrakeForce, 0.0f, 0.0f, "%.6f");
-            ImGui::SameLine();
-            if (ImGui::Button("-##handbrake_minus", ImVec2(24, 20))) { desiredHandbrakeForce -= 0.1f; }
-            ImGui::SameLine();
-            if (ImGui::Button("+##handbrake_plus", ImVec2(24, 20))) { desiredHandbrakeForce += 0.1f; }
-            
-            ImGui::NextColumn();
-            
-            // 第二列
-            ImGui::PushItemWidth(ImGui::GetColumnWidth() * 0.6f);
-            
-            // 牵引曲线max
-            ImGui::InputFloat("牵引曲线max##traction_curve_max", &desiredTractionCurveMax, 0.0f, 0.0f, "%.6f");
-            ImGui::SameLine();
-            if (ImGui::Button("-##traction_max_minus", ImVec2(24, 20))) { desiredTractionCurveMax -= 0.1f; }
-            ImGui::SameLine();
-            if (ImGui::Button("+##traction_max_plus", ImVec2(24, 20))) { desiredTractionCurveMax += 0.1f; }
-            
-            // 牵引曲线min
-            ImGui::InputFloat("牵引曲线min##traction_curve_min", &desiredTractionCurveMin, 0.0f, 0.0f, "%.6f");
-            ImGui::SameLine();
-            if (ImGui::Button("-##traction_min_minus", ImVec2(24, 20))) { desiredTractionCurveMin -= 0.1f; }
-            ImGui::SameLine();
-            if (ImGui::Button("+##traction_min_plus", ImVec2(24, 20))) { desiredTractionCurveMin += 0.1f; }
-            
-            // 碰撞Multi
-            ImGui::InputFloat("碰撞Multi##collision_multiplier", &desiredCollisionMultiplier, 0.0f, 0.0f, "%.6f");
-            ImGui::SameLine();
-            if (ImGui::Button("-##collision_minus", ImVec2(24, 20))) { desiredCollisionMultiplier -= 0.1f; }
-            ImGui::SameLine();
-            if (ImGui::Button("+##collision_plus", ImVec2(24, 20))) { desiredCollisionMultiplier += 0.1f; }
-            
-            // 武器Multi
-            ImGui::InputFloat("武器Multi##weapon_multiplier", &desiredWeaponMultiplier, 0.0f, 0.0f, "%.6f");
-            ImGui::SameLine();
-            if (ImGui::Button("-##weapon_minus", ImVec2(24, 20))) { desiredWeaponMultiplier -= 0.1f; }
-            ImGui::SameLine();
-            if (ImGui::Button("+##weapon_plus", ImVec2(24, 20))) { desiredWeaponMultiplier += 0.1f; }
-            
-            // 变形Multi
-            ImGui::InputFloat("变形Multi##deformation_multiplier", &desiredDeformationMultiplier, 0.0f, 0.0f, "%.6f");
-            ImGui::SameLine();
-            if (ImGui::Button("-##deformation_minus", ImVec2(24, 20))) { desiredDeformationMultiplier -= 0.1f; }
-            ImGui::SameLine();
-            if (ImGui::Button("+##deformation_plus", ImVec2(24, 20))) { desiredDeformationMultiplier += 0.1f; }
-            
-            // 发动机
-            ImGui::InputFloat("发动机##engine", &desiredEngine, 0.0f, 0.0f, "%.6f");
-            ImGui::SameLine();
-            if (ImGui::Button("-##engine_minus", ImVec2(24, 20))) { desiredEngine -= 0.1f; }
-            ImGui::SameLine();
-            if (ImGui::Button("+##engine_plus", ImVec2(24, 20))) { desiredEngine += 0.1f; }
-            
-            // 推力
-            ImGui::InputFloat("推力##thrust", &desiredThrust, 0.0f, 0.0f, "%.6f");
-            ImGui::SameLine();
-            if (ImGui::Button("-##thrust_minus", ImVec2(24, 20))) { desiredThrust -= 0.1f; }
-            ImGui::SameLine();
-            if (ImGui::Button("+##thrust_plus", ImVec2(24, 20))) { desiredThrust += 0.1f; }
-            
-            ImGui::Columns(1);
-            
-            // 按钮行
-            ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8, 4));
-            if (ImGui::Button("更新操控数据##update_handling_data", ImVec2(ImGui::GetContentRegionAvail().x * 0.45f, 0))) {
+        const bool tabOpen4 = ImGui::BeginTabItem("操控数据");
+        {
+            const ImVec2 tmin = ImGui::GetItemRectMin();
+            const ImVec2 tmax = ImGui::GetItemRectMax();
+            char tbuf[128];
+            snprintf(tbuf, sizeof(tbuf), "TAB 操控数据 %.0f %.0f %.0f %.0f", tmin.x, tmin.y, tmax.x, tmax.y);
+            ConsoleTheme::TraceNote(tbuf);
+        }
+        if (tabOpen4) {
+            ConsoleTheme::SectionHeader("操控数据", "实时数值 · 修改后点“更新操控数据”写入");
+
+            char now01[48], now02[48], now03[48], now04[48], now05[48], now06[48], now07[48], now08[48];
+            char now09[48], now10[48], now11[48], now12[48], now13[48], now14[48], now15[48];
+            snprintf(now01, sizeof(now01), "%.0f", currentMass);
+            snprintf(now02, sizeof(now02), "%.6f", currentDragCoefficient);
+            snprintf(now03, sizeof(now03), "%.6f", currentBuoyancy);
+            snprintf(now04, sizeof(now04), "%.6f", currentAcceleration);
+            snprintf(now05, sizeof(now05), "%.6f", currentDriveInertia);
+            snprintf(now06, sizeof(now06), "%.6f", currentInitialDriveForce);
+            snprintf(now07, sizeof(now07), "%.6f", currentBrakeForce);
+            snprintf(now08, sizeof(now08), "%.6f", currentHandbrakeForce);
+            snprintf(now09, sizeof(now09), "%.6f", currentTractionCurveMax);
+            snprintf(now10, sizeof(now10), "%.6f", currentTractionCurveMin);
+            snprintf(now11, sizeof(now11), "%.6f", currentCollisionMultiplier);
+            snprintf(now12, sizeof(now12), "%.6f", currentWeaponMultiplier);
+            snprintf(now13, sizeof(now13), "%.6f", currentDeformationMultiplier);
+            snprintf(now14, sizeof(now14), "%.6f", currentEngine);
+            snprintf(now15, sizeof(now15), "%.6f", currentThrust);
+
+            // ── 双列卡片：左「当前操控数据」（8 行 · 每行两组读数）｜右「修改操控数据」（8 行 · 每行两组步进）──
+            // 15 项读 + 15 项改原来竖向堆到一屏之外，现在左右并排，写入按钮紧贴两列下方。
+            ConsoleTheme::Columns col;
+            col.Begin(2);
+
+            // 左列 · 当前操控数据
+            col.Place(0);
+            ConsoleTheme::BoxBegin("veh_handling_now", 8, "当前操控数据", col.width);
+            ConsoleTheme::TextRow2("质量", now01, true, "牵引曲线max", now09, true, true);
+            ConsoleTheme::TextRow2("阻力系数", now02, true, "牵引曲线min", now10, true, true);
+            ConsoleTheme::TextRow2("浮力", now03, true, "碰撞倍率", now11, true, true);
+            ConsoleTheme::TextRow2("加速度", now04, true, "武器倍率", now12, true, true);
+            ConsoleTheme::TextRow2("驱动惯性", now05, true, "变形倍率", now13, true, true);
+            ConsoleTheme::TextRow2("初始驱动力", now06, true, "发动机", now14, true, true);
+            ConsoleTheme::TextRow2("制动力", now07, true, "推力", now15, true, true);
+            ConsoleTheme::TextRow2("手刹力", now08, true, nullptr, nullptr, true, false);
+            ConsoleTheme::BoxEnd();
+            col.Advance(0, ConsoleTheme::TitledBoxHeight(8));
+
+            // 右列 · 修改操控数据（每行两组，可直接键入或按步长微调）
+            col.Place(1);
+            ConsoleTheme::BoxBegin("veh_handling_edit", 8, "修改操控数据（可直接键入）", col.width);
+            ConsoleTheme::StepperRow2("veh_h1",
+                                      "质量", &desiredMass, 50.0f, "%.0f",
+                                      "阻力系数", &desiredDragCoefficient, 0.0001f, "%.6f");
+            ConsoleTheme::StepperRow2("veh_h2",
+                                      "浮力", &desiredBuoyancy, 0.1f, "%.6f",
+                                      "加速度", &desiredAcceleration, 0.1f, "%.6f");
+            ConsoleTheme::StepperRow2("veh_h3",
+                                      "驱动惯性", &desiredDriveInertia, 0.1f, "%.6f",
+                                      "初始驱动力", &desiredInitialDriveForce, 0.1f, "%.6f");
+            ConsoleTheme::StepperRow2("veh_h4",
+                                      "制动力", &desiredBrakeForce, 0.1f, "%.6f",
+                                      "手刹力", &desiredHandbrakeForce, 0.1f, "%.6f");
+            ConsoleTheme::StepperRow2("veh_h5",
+                                      "牵引曲线max", &desiredTractionCurveMax, 0.1f, "%.6f",
+                                      "牵引曲线min", &desiredTractionCurveMin, 0.1f, "%.6f");
+            ConsoleTheme::StepperRow2("veh_h6",
+                                      "碰撞倍率", &desiredCollisionMultiplier, 0.1f, "%.6f",
+                                      "武器倍率", &desiredWeaponMultiplier, 0.1f, "%.6f");
+            ConsoleTheme::StepperRow2("veh_h7",
+                                      "变形倍率", &desiredDeformationMultiplier, 0.1f, "%.6f",
+                                      "发动机", &desiredEngine, 0.1f, "%.6f");
+            ConsoleTheme::StepperRow2("veh_h8",
+                                      "推力", &desiredThrust, 0.1f, "%.6f",
+                                      nullptr, nullptr, 0.0f, "%.6f", false);
+            ConsoleTheme::BoxEnd();
+            col.Advance(1, ConsoleTheme::TitledBoxHeight(8));
+
+            col.End();
+
+            // 写入：整行两张按钮，紧贴两列下方（不再沉到一屏之外）
+            ConsoleTheme::BoxBeginPixels("veh_handling_ops", layout::box_height(0) + 45.0f * 2.0f, "写入", 0.0f);
+            if (ConsoleTheme::ButtonRow("更新操控数据", UiIcon::Check, true)) {
                 bNeedsOverwrite = true;
             }
-            ImGui::SameLine();
-            if (ImGui::Button("复制当前到目标##copy_current_handling", ImVec2(ImGui::GetContentRegionAvail().x, 0))) {
+            if (ConsoleTheme::ButtonRow("复制当前到目标", UiIcon::Folder)) {
                 desiredAcceleration = currentAcceleration;
                 desiredMass = currentMass;
                 desiredDragCoefficient = currentDragCoefficient;
@@ -701,10 +588,11 @@ bool VehicleEditor::RenderContent() {
                 desiredEngine = currentEngine;
                 desiredThrust = currentThrust;
             }
-            ImGui::PopStyleVar();
-            
+            ConsoleTheme::BoxEnd();
+
             ImGui::EndTabItem();
         }
+
         
         ImGui::EndTabBar();
     }

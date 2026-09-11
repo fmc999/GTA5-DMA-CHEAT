@@ -209,239 +209,234 @@ bool Teleport::Render()
     return true;
 }
 
+/* ---------- 传送页：卡片 + 芯片网格 + 坐标去重 ---------- */
+
+namespace
+{
+struct TpChip
+{
+    std::string label;
+    Vec3 pos;
+    bool dropped = false;   // 被 8 米内重复项合并掉，不再铺出按钮
+};
+
+struct TpGroup
+{
+    const char* id;
+    const char* title;
+    const char* note;
+    std::vector<TpChip> chips;
+};
+
+Vec3 TpLookup(const char* name)
+{
+    auto it = LocationMap.find(name);
+    return it == LocationMap.end() ? Vec3{ 0.0f, 0.0f, 0.0f } : it->second;
+}
+
+// 用户反馈“传送点有些基本上都重复了”：相距 8 米内的预设视为同一地点，
+// 只铺一个芯片，别名并进同一个标签（信息不丢，按钮不再重复）。
+const float kTpSamePlace = 8.0f;
+
+std::vector<TpGroup> TpBuildGroups()
+{
+    struct RawGroup
+    {
+        const char* id;
+        const char* title;
+        const char* note;
+        std::vector<std::string> names;
+    };
+
+    std::vector<RawGroup> raw;
+    raw.push_back({ "tp_g_general", "通用传送点", nullptr, GeneralLocationStrings });
+    raw.push_back({ "tp_g_vault", "赌场金库", "此选项只是卡金库门 满收益400w",
+                    { "赌场金库门前", "赌场金库大厅" } });
+    raw.push_back({ "tp_g_casinoprep", "赌场前置传送点", nullptr,
+                    { "游戏厅(新)", "天文台", "赌场大门", "FIB电梯", "FIB", "戴维斯市政厅", "国安局",
+                      "监狱正中心", "克里福德金库激光器", "保安证" } });
+    raw.push_back({ "tp_g_casinomission", "赌场任务", nullptr,
+                    { "下水道", "金库", "金库门", "金库门禁", "保安室1", "保安室2", "下层楼梯下",
+                      "小金库", "下层楼梯上", "洗衣房", "办公室", "员工大厅" } });
+    raw.push_back({ "tp_g_cayoprep", "佩里克岛前置", nullptr,
+                    { "信号箱 1F", "信号箱 2F", "信号箱 3F", "信号箱 4F", "撤离", "武器梅利威瑟",
+                      "等离子切割枪(藏身处)", "等离子切割枪1", "等离子切割枪2", "等离子切割枪3",
+                      "等离子切割枪4", "指纹验证器", "撤离岛满载回归" } });
+    raw.push_back({ "tp_g_cayovilla", "佩里克岛 · 别墅外", "侦察可正常用，上岛不建议容易直接死",
+                    { "无线电塔", "上层无线电塔", "第一房间", "主出口", "佩里克岛主目标",
+                      "佩里克岛大门别墅入口" } });
+    raw.push_back({ "tp_g_cayoloot", "佩里克岛 · 次要战利品", nullptr, CayoSecondaryLocationStrings });
+    raw.push_back({ "tp_g_cayowater", "佩里克岛 · 撤离", "不建议用传送很容易直接死",
+                    { "佩里克岛传送到水里撤离" } });
+
+    // 第一遍：按组把预设铺平（此时索引已全部确定，后面去重只改标签/标记，不再增删元素）
+    std::vector<TpGroup> groups;
+    for (const RawGroup& r : raw)
+    {
+        TpGroup g;
+        g.id = r.id;
+        g.title = r.title;
+        g.note = r.note;
+        for (const std::string& name : r.names)
+            g.chips.push_back({ name, TpLookup(name.c_str()), false });
+        if (!g.chips.empty())
+            groups.push_back(g);
+    }
+
+    // 第二遍：相距 8 米内视为同一地点（用户反馈“有些传送点基本上都重复了”）：
+    // 只保留先出现的那一个按钮，后面的名字并入它的标签，并标记为不显示。
+    struct Seen
+    {
+        int group;
+        int chip;
+        Vec3 pos;
+    };
+    std::vector<Seen> seen;
+
+    for (size_t gi = 0; gi < groups.size(); ++gi)
+    {
+        for (size_t ci = 0; ci < groups[gi].chips.size(); ++ci)
+        {
+            const Vec3 p = groups[gi].chips[ci].pos;
+            int found = -1;
+            for (size_t i = 0; i < seen.size(); ++i)
+            {
+                const float dx = seen[i].pos.x - p.x;
+                const float dy = seen[i].pos.y - p.y;
+                const float dz = seen[i].pos.z - p.z;
+                if (dx * dx + dy * dy + dz * dz <= kTpSamePlace * kTpSamePlace)
+                {
+                    found = static_cast<int>(i);
+                    break;
+                }
+            }
+
+            if (found >= 0)
+            {
+                std::string& label = groups[seen[found].group].chips[seen[found].chip].label;
+                const std::string& alias = groups[gi].chips[ci].label;
+                if (label.find(alias) == std::string::npos)
+                    label += " / " + alias;
+                groups[gi].chips[ci].dropped = true;
+                continue;
+            }
+
+            seen.push_back({ static_cast<int>(gi), static_cast<int>(ci), p });
+        }
+    }
+
+    // 第三遍：只留下未被合并的按钮，空组丢弃
+    std::vector<TpGroup> out;
+    for (TpGroup& g : groups)
+    {
+        std::vector<TpChip> keep;
+        for (TpChip& c : g.chips)
+        {
+            if (!c.dropped)
+                keep.push_back(c);
+        }
+        if (keep.empty())
+            continue;
+        g.chips.swap(keep);
+        out.push_back(std::move(g));
+    }
+
+    return out;
+}
+} // namespace
+
 bool Teleport::RenderContent()
 {
-    ConsoleTheme::SectionHeader("坐标工作区", "编辑目标坐标或选择预设位置");
+    static float adjustmentValue = 1.0f;   // X/Y/Z 步进步长（米）
 
-    // 当前位置
-    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.90f, 0.90f, 0.90f, 1.0f));
-    ImGui::Text("当前位置: %.2f, %.2f, %.2f", DMA::LocalPlayerLocation.x, DMA::LocalPlayerLocation.y, DMA::LocalPlayerLocation.z);
-    ImGui::PopStyleColor();
+    ConsoleTheme::SectionHeader("坐标传送", "X / Y / Z 可直接键入或按步长微调");
 
-    // Custom adjustment value
-    static float adjustmentValue = 1.0f;
-    ImGui::InputFloat("调整值", &adjustmentValue, 0.1f, 1.0f, "%.3f");
+    char buf[96];
 
-    // X coordinate with +/- buttons
-    ImGui::InputFloat("X", &Teleport::DesiredLocation.x);
-    ImGui::SameLine();
-    if (ImGui::Button("-##X")) {
-        Teleport::DesiredLocation.x -= adjustmentValue;
-    }
-    ImGui::SameLine();
-    if (ImGui::Button("+##X")) {
-        Teleport::DesiredLocation.x += adjustmentValue;
-    }
+    // ── 三列瀑布流：目标坐标 / 传送操作 / 8 组预设点 一起排 ──
+    // 原来坐标与操作各占一整行（右半边空着），预设点再单独铺一遍 → 实测内容 1460px 以上，
+    // 两列怎么排都超出一屏（曾量到盒底 1052，被视口裁掉）。三列 + 短列优先落位后整页铺满且不裁切。
+    ConsoleTheme::Columns col;
+    col.Begin(3);
 
-    // Y coordinate with +/- buttons
-    ImGui::InputFloat("Y", &Teleport::DesiredLocation.y);
-    ImGui::SameLine();
-    if (ImGui::Button("-##Y")) {
-        Teleport::DesiredLocation.y -= adjustmentValue;
-    }
-    ImGui::SameLine();
-    if (ImGui::Button("+##Y")) {
-        Teleport::DesiredLocation.y += adjustmentValue;
-    }
+    col.Place(0);
+    ConsoleTheme::BoxBegin("tp_target", 5, "目标坐标", col.width);
+    snprintf(buf, sizeof(buf), "%.2f, %.2f, %.2f", StartingLocation.x, StartingLocation.y, StartingLocation.z);
+    ConsoleTheme::TextRow("当前位置", buf, true);
+    snprintf(buf, sizeof(buf), "%.2f, %.2f, %.2f", DesiredLocation.x, DesiredLocation.y, DesiredLocation.z);
+    ConsoleTheme::TextRow("目标坐标", buf, true);
+    ConsoleTheme::StepperRow("tp_x", "X", &DesiredLocation.x, adjustmentValue, "%.2f");
+    ConsoleTheme::StepperRow("tp_y", "Y", &DesiredLocation.y, adjustmentValue, "%.2f");
+    ConsoleTheme::StepperRow("tp_z", "Z", &DesiredLocation.z, adjustmentValue, "%.2f");
+    ConsoleTheme::BoxEnd();
+    col.Advance(0, ConsoleTheme::TitledBoxHeight(5));
 
-    // Z coordinate with +/- buttons
-    ImGui::InputFloat("Z", &Teleport::DesiredLocation.z);
-    ImGui::SameLine();
-    if (ImGui::Button("-##Z")) {
-        Teleport::DesiredLocation.z -= adjustmentValue;
-    }
-    ImGui::SameLine();
-    if (ImGui::Button("+##Z")) {
-        Teleport::DesiredLocation.z += adjustmentValue;
-    }
-
-    if (ImGui::Button("复制当前位置"))
+    col.Place(1);
+    ConsoleTheme::BoxBeginPixels("tp_actions", layout::box_height(0) + 45.0f * 4.0f, "传送操作", col.width);
+    if (ConsoleTheme::ButtonRow("复制当前位置到目标", UiIcon::Folder))
     {
-        Teleport::DesiredLocation = DMA::LocalPlayerLocation;
+        DesiredLocation = StartingLocation;
     }
-    ImGui::SameLine();
-
-    if (ImGui::Button("传送玩家"))
+    if (ConsoleTheme::ButtonRow("传送到目标坐标", UiIcon::Target, true))
     {
         bRequestedTeleport = true;
     }
-
-    if (ImGui::Button("传送到标记点 (F5)"))
+    if (ConsoleTheme::ButtonRow("传送到标记点 (F5)", UiIcon::Pin))
+    {
         RequestWaypointTeleport();
-    ImGui::SameLine();
-    if (ImGui::Button("传送到任务点 (F6)"))
+    }
+    if (ConsoleTheme::ButtonRow("传送到任务点 (F6)", UiIcon::Map))
+    {
         RequestObjectiveTeleport();
-
-    if (ImGui::CollapsingHeader("通用传送点"))
-    {
-        for (auto Name : GeneralLocationStrings)
-        {
-            if (ImGui::Button(Name.c_str()))
-            {
-                DesiredLocation = LocationMap[Name];
-                bRequestedTeleport = true;
-            }
-        }
     }
+    ConsoleTheme::BoxEnd();
+    col.Advance(1, ConsoleTheme::TitledBoxPixels(layout::box_height(0) + 45.0f * 4.0f));
 
-    if (ImGui::CollapsingHeader("赌场金库传送点"))
+    col.End();
+
+    static const std::vector<TpGroup> groups = TpBuildGroups();
+    for (const TpGroup& g : groups)
     {
-        ImGui::Indent();
-        
-        if (ImGui::Button("赌场金库门前(兵不厌诈别开古贝科技运输车)"))
+        const float avail = col.width - layout::box_pad_x * 2.0f;
+        std::vector<const char*> labels;
+        labels.reserve(g.chips.size());
+        for (const TpChip& c : g.chips)
+            labels.push_back(c.label.c_str());
+
+        const bool hasNote = g.note && g.note[0] != '\0';
+        const int chipCount = static_cast<int>(labels.size());
+        const float gridH = ConsoleTheme::ChipGridHeight(labels.data(), chipCount, avail, 6.0f);
+        const float noteH = hasNote ? layout::row_h + layout::separator_h : 0.0f;
+        const float boxH = layout::box_pad_y * 2.0f + gridH + noteH;
+
+        const int slot = col.Shortest();
+        col.Place(slot);
+        ConsoleTheme::BoxBeginPixels(g.id, boxH, g.title, col.width);
+        if (hasNote)
+            ConsoleTheme::NoteRow(g.note, true, true);
+        const int hit = ConsoleTheme::ChipGrid(g.id, labels.data(), chipCount, avail, 6.0f);
+        if (hit >= 0)
         {
-            DesiredLocation = LocationMap["赌场金库门前"];
+            DesiredLocation = g.chips[hit].pos;
             bRequestedTeleport = true;
+            // 自检：每次真正命中追加一行 → 用来验证“点一个芯片只触发一个动作”
+            char chipLog[192];
+            snprintf(chipLog, sizeof(chipLog), "CHIPHIT %s i=%d label=%s\r\n",
+                     g.id, hit, g.chips[hit].label.c_str());
+            FILE* cf = nullptr;
+            if (fopen_s(&cf, "chip_hits.log", "a") == 0 && cf)
+            {
+                fputs(chipLog, cf);
+                fclose(cf);
+            }
         }
-
-        if (ImGui::Button("赌场金库大厅(需要开任务到金库门)"))
-        {
-            DesiredLocation = LocationMap["赌场金库大厅"];
-            bRequestedTeleport = true;
-        }
-        
-        ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), "此选项只是卡金库门 满收益400w");
-        
-        ImGui::Unindent();
+        ConsoleTheme::BoxEnd();
+        col.Advance(slot, ConsoleTheme::TitledBoxPixels(boxH));
     }
-
-    if (ImGui::CollapsingHeader("赌场前置传送点"))
-    {
-        ImGui::Indent();
-        
-        if (ImGui::Button("游戏厅##casino_prep")) { DesiredLocation = LocationMap["游戏厅(新)"]; bRequestedTeleport = true; }
-        if (ImGui::Button("天文台")) { DesiredLocation = LocationMap["天文台"]; bRequestedTeleport = true; }
-        if (ImGui::Button("赌场大门")) { DesiredLocation = LocationMap["赌场大门"]; bRequestedTeleport = true; }
-        if (ImGui::Button("FIB电梯")) { DesiredLocation = LocationMap["FIB电梯"]; bRequestedTeleport = true; }
-        if (ImGui::Button("FIB")) { DesiredLocation = LocationMap["FIB"]; bRequestedTeleport = true; }
-        if (ImGui::Button("戴维斯市政厅")) { DesiredLocation = LocationMap["戴维斯市政厅"]; bRequestedTeleport = true; }
-        if (ImGui::Button("国安局")) { DesiredLocation = LocationMap["国安局"]; bRequestedTeleport = true; }
-        if (ImGui::Button("监狱正中心")) { DesiredLocation = LocationMap["监狱正中心"]; bRequestedTeleport = true; }
-        if (ImGui::Button("克里福德金库激光器")) { DesiredLocation = LocationMap["克里福德金库激光器"]; bRequestedTeleport = true; }
-        if (ImGui::Button("保安证")) { DesiredLocation = LocationMap["保安证"]; bRequestedTeleport = true; }
-        
-        ImGui::Unindent();
-    }
-
-    if (ImGui::CollapsingHeader("赌场任务")) {
-        if (ImGui::Button("下水道")) { DesiredLocation = LocationMap["下水道"]; bRequestedTeleport = true; }
-        if (ImGui::Button("金库")) { DesiredLocation = LocationMap["金库"]; bRequestedTeleport = true; }
-        if (ImGui::Button("金库门")) { DesiredLocation = LocationMap["金库门"]; bRequestedTeleport = true; }
-        if (ImGui::Button("金库门禁")) { DesiredLocation = LocationMap["金库门禁"]; bRequestedTeleport = true; }
-        if (ImGui::Button("保安室1")) { DesiredLocation = LocationMap["保安室1"]; bRequestedTeleport = true; }
-        if (ImGui::Button("保安室2")) { DesiredLocation = LocationMap["保安室2"]; bRequestedTeleport = true; }
-        if (ImGui::Button("下层楼梯下")) { DesiredLocation = LocationMap["下层楼梯下"]; bRequestedTeleport = true; }
-        if (ImGui::Button("小金库")) { DesiredLocation = LocationMap["小金库"]; bRequestedTeleport = true; }
-        if (ImGui::Button("下层楼梯上")) { DesiredLocation = LocationMap["下层楼梯上"]; bRequestedTeleport = true; }
-        if (ImGui::Button("洗衣房")) { DesiredLocation = LocationMap["洗衣房"]; bRequestedTeleport = true; }
-        if (ImGui::Button("办公室")) { DesiredLocation = LocationMap["办公室"]; bRequestedTeleport = true; }
-        if (ImGui::Button("员工大厅")) { DesiredLocation = LocationMap["员工大厅"]; bRequestedTeleport = true; }
-    }
-
-    if (ImGui::CollapsingHeader("佩里克岛前置"))
-    {
-        if (ImGui::Button("信号箱 1F")) { DesiredLocation = LocationMap["信号箱 1F"]; bRequestedTeleport = true; }
-        ImGui::SameLine();
-        if (ImGui::Button("信号箱 2F")) { DesiredLocation = LocationMap["信号箱 2F"]; bRequestedTeleport = true; }
-        ImGui::SameLine();
-        if (ImGui::Button("信号箱 3F")) { DesiredLocation = LocationMap["信号箱 3F"]; bRequestedTeleport = true; }
-        ImGui::SameLine();
-        if (ImGui::Button("信号箱 4F")) { DesiredLocation = LocationMap["信号箱 4F"]; bRequestedTeleport = true; }
-        if (ImGui::Button("撤离")) { DesiredLocation = LocationMap["撤离"]; bRequestedTeleport = true; }
-        ImGui::SameLine();
-        if (ImGui::Button("武器梅利威瑟")) { DesiredLocation = LocationMap["武器梅利威瑟"]; bRequestedTeleport = true; }
-        if (ImGui::Button("等离子切割枪(藏身处)")) { DesiredLocation = LocationMap["等离子切割枪(藏身处)"]; bRequestedTeleport = true; }
-        ImGui::SameLine();
-        if (ImGui::Button("等离子切割枪1")) { DesiredLocation = LocationMap["等离子切割枪1"]; bRequestedTeleport = true; }
-        if (ImGui::Button("等离子切割枪2")) { DesiredLocation = LocationMap["等离子切割枪2"]; bRequestedTeleport = true; }
-        ImGui::SameLine();
-        if (ImGui::Button("等离子切割枪3")) { DesiredLocation = LocationMap["等离子切割枪3"]; bRequestedTeleport = true; }
-        if (ImGui::Button("等离子切割枪4")) { DesiredLocation = LocationMap["等离子切割枪4"]; bRequestedTeleport = true; }
-        ImGui::SameLine();
-        if (ImGui::Button("指纹验证器")) { DesiredLocation = LocationMap["指纹验证器"]; bRequestedTeleport = true; }
-        if (ImGui::Button("撤离岛满载回归")) { DesiredLocation = LocationMap["撤离岛满载回归"]; bRequestedTeleport = true; }
-    }
-
-    if (ImGui::CollapsingHeader("佩里克岛传送点"))
-    {
-        ImGui::Indent();
-
-        if (ImGui::CollapsingHeader(" 别墅外侦察用"))
-        {
-
-            if (ImGui::Button("无线电塔"))
-            {
-                DesiredLocation = LocationMap["无线电塔"];
-                bRequestedTeleport = true;
-            }
-
-            if (ImGui::Button("上层无线电塔"))
-            {
-                DesiredLocation = LocationMap["上层无线电塔"];
-                bRequestedTeleport = true;
-            }
-        }
-
-        if (ImGui::CollapsingHeader(" 别墅内"))
-        {
-
-
-            if (ImGui::Button("第一房间"))
-            {
-                DesiredLocation = LocationMap["第一房间"];
-                bRequestedTeleport = true;
-            }
-
-            if (ImGui::Button("主出口"))
-            {
-                DesiredLocation = LocationMap["主出口"];
-                bRequestedTeleport = true;
-            }
-            
-            if (ImGui::Button("佩里克岛主目标"))
-            {
-                DesiredLocation = LocationMap["佩里克岛主目标"];
-                bRequestedTeleport = true;
-            }
-            
-            if (ImGui::Button("佩里克岛大门别墅入口"))
-            {
-                DesiredLocation = LocationMap["佩里克岛大门别墅入口"];
-                bRequestedTeleport = true;
-            }
-            
-            ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), "不建议用传送很容易直接死");
-        }
-
-        if (ImGui::CollapsingHeader("次要战利品"))
-        {
-            for (auto Name : CayoSecondaryLocationStrings)
-            {
-                if (ImGui::Button(Name.c_str()))
-                {
-                    DesiredLocation = LocationMap[Name.c_str()];
-                    bRequestedTeleport = true;
-                }
-            }
-        }
-        
-        // 添加撤离点按钮
-        if (ImGui::Button("佩里克岛传送到水里撤离"))
-        {
-            DesiredLocation = LocationMap["佩里克岛传送到水里撤离"];
-            bRequestedTeleport = true;
-        }
-        
-        // 添加黄色警告文字
-        ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), "侦察可正常用，上岛不建议容易直接死");
-
-        ImGui::Unindent();
-    }
-
+    col.End();
 
     return true;
 }
-
 bool Teleport::RequestWaypointTeleport()
 {
     const Vec3 waypointCoords = GetWaypointCoords();

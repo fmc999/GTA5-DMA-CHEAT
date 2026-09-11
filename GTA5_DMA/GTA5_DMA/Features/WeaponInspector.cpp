@@ -5,346 +5,238 @@
 
 #include "Offsets.h"
 
+#include <cstdio>
+
+namespace
+{
+// 盒子间距（与 MenuManager 的 kBoxGap 一致）
+constexpr float kBoxGap = 10.0f;
+// 盒内「按钮行」占位：行间距 + 按钮高度
+// 按钮块高度：ItemSpacing(10) + 按钮(button_h) + 分隔(1)，实测比原 8.0f 多 3px，
+// 少算会让盒内容超出下边框 3px（自检里的 slack=-3）。
+constexpr float kButtonBlock = 11.0f + layout::button_h;
+
+// 内容盒是子窗口，不参与 ImGui 的组布局，必须显式定位（与 MenuManager::TwoColumn 同构）
+struct TwoColumn
+{
+    ImVec2 origin = ImVec2(0.0f, 0.0f);
+    float  width = 0.0f;
+    float  gap = layout::content_gap;
+    float  y[2] = { 0.0f, 0.0f };
+
+    void Begin()
+    {
+        origin = ImGui::GetCursorScreenPos();
+        width = (ImGui::GetContentRegionAvail().x - gap) * 0.5f;
+        y[0] = y[1] = origin.y;
+    }
+    void Place(int column)
+    {
+        const int col = (column < 0 || column > 1) ? 0 : column;
+        ImGui::SetCursorScreenPos(ImVec2(origin.x + static_cast<float>(col) * (width + gap), y[col]));
+    }
+    void Advance(int column, float boxHeight)
+    {
+        const int col = (column < 0 || column > 1) ? 0 : column;
+        y[col] += boxHeight + kBoxGap;
+    }
+    void End()
+    {
+        char note[128];
+        std::snprintf(note, sizeof(note), "COLUMN y0=%.0f y1=%.0f delta=%.0f contentTop=%.0f",
+                      y[0] - origin.y, y[1] - origin.y, (y[0] > y[1] ? y[0] : y[1]) - (y[0] < y[1] ? y[0] : y[1]),
+                      origin.y);
+        ConsoleTheme::TraceNote(note);
+        ImGui::SetCursorScreenPos(ImVec2(origin.x, y[0] > y[1] ? y[0] : y[1]));
+        ImGui::Dummy(ImVec2(width, 0.0f));
+    }
+};
+
+// 带标题的盒子占位 = 标题行(section_h) + 盒子本体
+float TitledBoxHeight(int rows) { return layout::box_height(rows) + layout::section_h; }
+float TitledBoxPixels(float height) { return height + layout::section_h; }
+} // namespace
+
 bool WeaponInspector::RenderContent() {
-    ConsoleTheme::SectionHeader("武器工作区", "当前武器属性与写入参数");
+    // 与其它页面共用同一套设计语言：两列 + 玻璃内容盒 + 行式控件。
+    // 旧实现用 ImGui::BeginTable / SeparatorText / Checkbox 自成一套视觉，
+    // 与外壳脱节，且输入框宽度随表格列宽漂移、标签忽左忽右、tooltip 靠游离的 "(?)"——
+    // 这里全部改成盒内行：标签左对齐、控件列宽固定、说明并入行描述。
+    float bulletSpeed = 0.0f;
+    const bool bulletSpeedValid = ReadBulletSpeed(bulletSpeed);
 
-	// 创建两列布局
-	ImGui::BeginTable("weapon_table", 2, ImGuiTableFlags_Resizable | ImGuiTableFlags_Borders);
+    float objectImpactForce = 0.0f;
+    float pedImpactForce = 0.0f;
+    float vehicleImpactForce = 0.0f;
+    float aircraftImpactForce = 0.0f;
+    const bool objectImpactValid = ReadImpactForce(0xD8, objectImpactForce);
+    const bool pedImpactValid = ReadImpactForce(0xDC, pedImpactForce);
+    const bool vehicleImpactValid = ReadImpactForce(0xE0, vehicleImpactForce);
+    const bool aircraftImpactValid = ReadImpactForce(0xE4, aircraftImpactForce);
 
-	// 左侧列：当前武器信息和属性修改
-	ImGui::TableNextRow();
-	ImGui::TableNextColumn();
+    char damageText[32], fireRateText[32], rangeText[32], penetrationText[32];
+    char accuracyText[32], moveAccuracyText[32], lockRangeText[32], recoilText[32];
+    char impactTypeText[32], impactExplosionText[32];
+    char bulletSpeedText[32], objectForceText[32], pedForceText[32], vehicleForceText[32], aircraftForceText[32];
+    std::snprintf(damageText, sizeof(damageText), "%.2f", WepInfo.WeaponDamage);
+    std::snprintf(fireRateText, sizeof(fireRateText), "%.2f", WepInfo.WeaponFireRate);
+    std::snprintf(rangeText, sizeof(rangeText), "%.2f", WepInfo.WeaponRange);
+    std::snprintf(penetrationText, sizeof(penetrationText), "%.2f", WepInfo.WeaponPenetration);
+    std::snprintf(accuracyText, sizeof(accuracyText), "%.2f", WepInfo.WeaponAccuracy);
+    std::snprintf(moveAccuracyText, sizeof(moveAccuracyText), "%.2f", WepInfo.WeaponMoveAccuracy);
+    std::snprintf(lockRangeText, sizeof(lockRangeText), "%.2f", WepInfo.WeaponLockRange);
+    std::snprintf(recoilText, sizeof(recoilText), "%.2f", WepInfo.RecoilAmplitude);
+    std::snprintf(impactTypeText, sizeof(impactTypeText), "%d", static_cast<int>(WepInfo.ImpactType));
+    std::snprintf(impactExplosionText, sizeof(impactExplosionText), "%d", static_cast<int>(WepInfo.ImpactExplosion));
+    if (bulletSpeedValid)
+        std::snprintf(bulletSpeedText, sizeof(bulletSpeedText), "%.2f", bulletSpeed);
+    else
+        std::snprintf(bulletSpeedText, sizeof(bulletSpeedText), "读取失败");
+    if (objectImpactValid) std::snprintf(objectForceText, sizeof(objectForceText), "%.2f", objectImpactForce);
+    else std::snprintf(objectForceText, sizeof(objectForceText), "读取失败");
+    if (pedImpactValid) std::snprintf(pedForceText, sizeof(pedForceText), "%.2f", pedImpactForce);
+    else std::snprintf(pedForceText, sizeof(pedForceText), "读取失败");
+    if (vehicleImpactValid) std::snprintf(vehicleForceText, sizeof(vehicleForceText), "%.2f", vehicleImpactForce);
+    else std::snprintf(vehicleForceText, sizeof(vehicleForceText), "读取失败");
+    if (aircraftImpactValid) std::snprintf(aircraftForceText, sizeof(aircraftForceText), "%.2f", aircraftImpactForce);
+    else std::snprintf(aircraftForceText, sizeof(aircraftForceText), "读取失败");
 
-	// 当前武器信息
-	ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.90f, 0.90f, 0.90f, 1.0f));
-	ImGui::SeparatorText("当前武器信息");
-	ImGui::PopStyleColor();
+    TwoColumn col;
+    col.Begin();
 
-	ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.80f, 0.80f, 0.80f, 1.0f));
-	ImGui::Text("伤害: %.2f", WepInfo.WeaponDamage);
-	ImGui::Text("射速: %.2f", WepInfo.WeaponFireRate);
-	ImGui::Text("射程: %.2f", WepInfo.WeaponRange);
-	ImGui::Text("穿透: %.2f", WepInfo.WeaponPenetration);
-	ImGui::Text("射击精准度: %.2f", WepInfo.WeaponAccuracy);
-	ImGui::Text("移动射击精准度: %.2f", WepInfo.WeaponMoveAccuracy);
-	ImGui::Text("射击锁定范围: %.2f", WepInfo.WeaponLockRange);
-	ImGui::Text("后坐力: %.2f", WepInfo.RecoilAmplitude);
-	ImGui::Text("冲击类型: %d", WepInfo.ImpactType);
-	ImGui::Text("冲击爆炸: %d", WepInfo.ImpactExplosion);
-	
-	// 读取并显示子弹飞行速度
-	float bulletSpeed = 0.0f;
-	bool bulletSpeedValid = ReadBulletSpeed(bulletSpeed);
-	
-	if (bulletSpeedValid) {
-		ImGui::Text("子弹飞行速度: %.2f", bulletSpeed);
-	} else {
-		ImGui::Text("子弹飞行速度: 读取失败");
-	}
-	
-	// 读取并显示冲击力相关数值
-	float objectImpactForce = 0.0f;
-	float pedImpactForce = 0.0f;
-	float vehicleImpactForce = 0.0f;
-	float aircraftImpactForce = 0.0f;
-	
-	bool objectImpactValid = ReadImpactForce(0xD8, objectImpactForce);
-	bool pedImpactValid = ReadImpactForce(0xDC, pedImpactForce);
-	bool vehicleImpactValid = ReadImpactForce(0xE0, vehicleImpactForce);
-	bool aircraftImpactValid = ReadImpactForce(0xE4, aircraftImpactForce);
-	
-	if (objectImpactValid) {
-		ImGui::Text("武器命中普通物体冲击力: %.2f", objectImpactForce);
-	} else {
-		ImGui::Text("武器命中普通物体冲击力: 读取失败");
-	}
-	
-	if (pedImpactValid) {
-		ImGui::Text("武器对行人冲击力: %.2f", pedImpactForce);
-	} else {
-		ImGui::Text("武器对行人冲击力: 读取失败");
-	}
-	
-	if (vehicleImpactValid) {
-		ImGui::Text("武器对载具冲击力: %.2f", vehicleImpactForce);
-	} else {
-		ImGui::Text("武器对载具冲击力: 读取失败");
-	}
-	
-	if (aircraftImpactValid) {
-		ImGui::Text("武器对飞行目标冲击力: %.2f", aircraftImpactForce);
-	} else {
-		ImGui::Text("武器对飞行目标冲击力: 读取失败");
-	}
-	
-	ImGui::PopStyleColor();
+    /* ================= 左列 ================= */
 
-	ImGui::Spacing();
-	ImGui::Spacing();
+    // 1) 当前武器信息：读数两两成行（8 项属性 + 2 项冲击参数），不再每项独占一行留下大片空档
+    {
+        col.Place(0);
+        ConsoleTheme::BoxBeginPixels("weapon_current", layout::box_height(5), "当前武器信息", col.width);
+        ConsoleTheme::TextRow2("伤害", damageText, true, "射速", fireRateText, true);
+        ConsoleTheme::TextRow2("射程", rangeText, true, "穿透", penetrationText, true);
+        ConsoleTheme::TextRow2("射击精准度", accuracyText, true, "移动精准度", moveAccuracyText, true);
+        ConsoleTheme::TextRow2("射击锁定范围", lockRangeText, true, "后坐力幅度", recoilText, true);
+        ConsoleTheme::TextRow2("冲击类型", impactTypeText, true, "冲击爆炸", impactExplosionText, true, false);
+        ConsoleTheme::BoxEnd();
+        col.Advance(0, TitledBoxPixels(layout::box_height(5)));
+    }
 
-	// 武器属性修改
-	ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.90f, 0.90f, 0.90f, 1.0f));
-	ImGui::SeparatorText("覆盖数值");
-	ImGui::PopStyleColor();
+    // 2) 武器功能选项：开关成组，原先挂在 "(?)" tooltip 上的说明直接写在行下
+    {
+        col.Place(0);
+        ConsoleTheme::BoxBegin("weapon_options", 7, "武器功能选项", col.width);
+        ConsoleTheme::ToggleRow("wi_inf_ammo", "无限弹药", "弹匣容量不再减少", &bInfiniteAmmo);
+        ConsoleTheme::ToggleRow("wi_no_reload", "无需装弹", "跳过换弹动作直接射击", &bNoReload);
+        ConsoleTheme::ToggleRow("wi_disable_others", "禁用其他人武器", "瞄准范围内其他玩家无法开火", &bDisableOthersWeapons);
+        ConsoleTheme::ToggleRow("wi_aim_health", "瞄准敌人修改血量为-1", "瞄准敌人生效；对自己同样生效，取消需重新瞄准敌方", &bSetAimTargetHealthToMinusOne);
+        ConsoleTheme::ToggleRow("wi_aim_armor", "瞄准敌人修改防弹衣为-1", "将瞄准敌人的防弹衣修改为 -1", &bSetAimTargetArmorToMinusOne);
+        ConsoleTheme::ToggleRow("wi_aim_speed", "修改其他人移动速度为10", "将瞄准敌人的移动速度修改为 10", &bModifyOthersMoveSpeed);
+        ConsoleTheme::ToggleRow("wi_million_hit", "百万瞬击", "子弹飞行速度设置为 99999999", &bMillionInstantHit, false);
+        ConsoleTheme::BoxEnd();
+        col.Advance(0, TitledBoxHeight(7));
+    }
 
-	// 覆盖数值部分，使用双列布局
-	ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.13f, 0.14f, 0.17f, 1.0f));
-	ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(0.20f, 0.22f, 0.27f, 1.0f));
-	ImGui::PushStyleColor(ImGuiCol_FrameBgActive, ImVec4(0.16f, 0.18f, 0.22f, 1.0f));
+    // 3) 一键魔改：写入一组预设数值；勾选后同时立即应用
+    {
+        const float boxH = layout::box_height(1) + kButtonBlock;
+        col.Place(0);
+        ConsoleTheme::BoxBeginPixels("weapon_one_click", boxH, "一键教训智障儿童（天机炮版本半无敌也死）", col.width);
+        ConsoleTheme::ToggleRow("wi_apply_one_click", "勾选直接应用", "勾选后点击一键魔改将直接写入当前武器", &bApplyOneClickMod);
+        if (ConsoleTheme::ButtonRow("一键魔改", UiIcon::Zap, true))
+        {
+            DesiredWepInfo.WeaponDamage = 99999.0f;
+            DesiredWepInfo.WeaponFireRate = 0.0f;
+            DesiredWepInfo.WeaponRange = 99999.0f;
+            DesiredWepInfo.WeaponPenetration = 99999.0f;
+            DesiredWepInfo.WeaponAccuracy = 0.0f;
+            DesiredWepInfo.WeaponMoveAccuracy = 0.0f;
+            DesiredWepInfo.WeaponLockRange = 99999.0f;
+            DesiredWepInfo.RecoilAmplitude = 0.0f;
+            DesiredWepInfo.ImpactType = IT_EXPLOSION;      // 5
+            DesiredWepInfo.ImpactExplosion = IE_ORBITAL_CANNON; // 59 轨道炮
 
-	// 设置双列布局
-	ImGui::BeginTable("weapon_properties_table", 2, ImGuiTableFlags_Resizable);
+            if (bApplyOneClickMod)
+                bNeedsOverwrite = true;
+        }
+        ConsoleTheme::BoxEnd();
+        col.Advance(0, TitledBoxPixels(boxH));
+    }
 
-	// 武器属性输入框 - 双列布局
-	ImGui::TableNextRow();
-	ImGui::TableNextColumn();
-	ImGui::InputFloat("武器伤害", &DesiredWepInfo.WeaponDamage, 0.0f, 0.0f, "%.3f");
-	ImGui::TableNextColumn();
-	ImGui::InputFloat("武器射速", &DesiredWepInfo.WeaponFireRate, 0.0f, 0.0f, "%.3f");
+    /* ================= 右列 ================= */
 
-	ImGui::TableNextRow();
-	ImGui::TableNextColumn();
-	ImGui::InputFloat("武器射程", &DesiredWepInfo.WeaponRange, 0.0f, 0.0f, "%.3f");
-	ImGui::TableNextColumn();
-	ImGui::InputFloat("武器穿透", &DesiredWepInfo.WeaponPenetration, 0.0f, 0.0f, "%.3f");
+    // 4) 覆盖数值：10 个可编辑数值两两成行，输入框宽度固定，标签严格对齐
+    {
+        const float boxH = layout::box_height(5) + kButtonBlock;
+        int impactType = static_cast<int>(DesiredWepInfo.ImpactType);
+        int impactExplosion = static_cast<int>(DesiredWepInfo.ImpactExplosion);
 
-	ImGui::TableNextRow();
-	ImGui::TableNextColumn();
-	ImGui::InputFloat("射击精准度", &DesiredWepInfo.WeaponAccuracy, 0.0f, 0.0f, "%.3f");
-	ImGui::TableNextColumn();
-	ImGui::InputFloat("移动射击精准度", &DesiredWepInfo.WeaponMoveAccuracy, 0.0f, 0.0f, "%.3f");
+        col.Place(1);
+        ConsoleTheme::BoxBeginPixels("weapon_overwrite", boxH, "覆盖数值", col.width);
+        ConsoleTheme::InputRow2("wi_damage", "武器伤害", &DesiredWepInfo.WeaponDamage, "武器射速", &DesiredWepInfo.WeaponFireRate, "%.3f");
+        ConsoleTheme::InputRow2("wi_range", "武器射程", &DesiredWepInfo.WeaponRange, "武器穿透", &DesiredWepInfo.WeaponPenetration, "%.3f");
+        ConsoleTheme::InputRow2("wi_accuracy", "射击精准度", &DesiredWepInfo.WeaponAccuracy, "移动精准度", &DesiredWepInfo.WeaponMoveAccuracy, "%.3f");
+        ConsoleTheme::InputRow2("wi_lock_range", "射击锁定范围", &DesiredWepInfo.WeaponLockRange, "后坐力幅度", &DesiredWepInfo.RecoilAmplitude, "%.3f");
+        if (ConsoleTheme::IntRow2("wi_impact", "冲击类型", &impactType, "冲击爆炸", &impactExplosion, false))
+        {
+            DesiredWepInfo.ImpactType = static_cast<eImpactType>(impactType);
+            DesiredWepInfo.ImpactExplosion = static_cast<eImpactExplosion>(impactExplosion);
+        }
 
-	ImGui::TableNextRow();
-	ImGui::TableNextColumn();
-	ImGui::InputFloat("射击锁定范围", &DesiredWepInfo.WeaponLockRange, 0.0f, 0.0f, "%.3f");
-	ImGui::TableNextColumn();
-	ImGui::InputFloat("后坐力幅度", &DesiredWepInfo.RecoilAmplitude, 0.0f, 0.0f, "%.3f");
+        const float btnW = (ConsoleTheme::RowWidth() - 10.0f) * 0.5f;
+        if (ConsoleTheme::AccentButton("更新", UiIcon::Check, ImVec2(btnW, layout::button_h)))
+            bNeedsOverwrite = true;
+        ImGui::SameLine(0.0f, 10.0f);
+        if (ConsoleTheme::GhostButton("复制当前到目标", UiIcon::Chevron, ImVec2(btnW, layout::button_h)))
+            bRequestedCopyToDesired = true;
+        ConsoleTheme::BoxEnd();
+        col.Advance(1, TitledBoxPixels(boxH));
+    }
 
-	ImGui::TableNextRow();
-	ImGui::TableNextColumn();
-	ImGui::InputInt("冲击类型", (int*)&DesiredWepInfo.ImpactType);
-	ImGui::TableNextColumn();
-	ImGui::InputInt("冲击爆炸", (int*)&DesiredWepInfo.ImpactExplosion);
+    // 5) 命中参数：游戏内实时读数（读取失败用警示色）
+    {
+        col.Place(1);
+        ConsoleTheme::BoxBegin("weapon_hit_readout", 3, "命中参数", col.width);
+        ConsoleTheme::TextRow2("子弹飞行速度", bulletSpeedText, bulletSpeedValid, "普通物体冲击力", objectForceText, objectImpactValid);
+        ConsoleTheme::TextRow2("行人冲击力", pedForceText, pedImpactValid, "载具冲击力", vehicleForceText, vehicleImpactValid);
+        ConsoleTheme::TextRow2("飞行载具冲击力", aircraftForceText, aircraftImpactValid, nullptr, nullptr, true, false);
+        ConsoleTheme::BoxEnd();
+        col.Advance(1, TitledBoxHeight(3));
+    }
 
-	ImGui::EndTable();
+    // 6) 冲击力覆盖：4 个可编辑冲击力 + 持续写入开关
+    {
+        const float boxH = layout::box_height(3) + kButtonBlock;
+        col.Place(1);
+        ConsoleTheme::BoxBeginPixels("weapon_impact_write", boxH, "让他们飞起来冲击力", col.width);
+        ConsoleTheme::InputRow2("wi_force_object", "普通物体", &DesiredObjectImpactForce, "行人", &DesiredPedImpactForce, "%.0f");
+        ConsoleTheme::InputRow2("wi_force_vehicle", "陆地载具", &DesiredVehicleImpactForce, "飞行载具", &DesiredAircraftImpactForce, "%.0f");
+        ConsoleTheme::ToggleRow("wi_apply_impact", "直接应用数值", "勾选后持续写入设置的冲击力数值", &bApplyImpactForces);
 
-	ImGui::PopStyleColor(3);
-	
-	// 武器属性的应用和复制按钮
-	ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.26f, 0.59f, 0.98f, 0.40f));
-	ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.26f, 0.59f, 0.98f, 0.60f));
-	ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.26f, 0.59f, 0.98f, 0.80f));
+        const float btnW = (ConsoleTheme::RowWidth() - 10.0f) * 0.5f;
+        if (ConsoleTheme::AccentButton("更新冲击力", UiIcon::Zap, ImVec2(btnW, layout::button_h)))
+        {
+            WriteImpactForce(0xD8, DesiredObjectImpactForce);
+            WriteImpactForce(0xDC, DesiredPedImpactForce);
+            WriteImpactForce(0xE0, DesiredVehicleImpactForce);
+            WriteImpactForce(0xE4, DesiredAircraftImpactForce);
+        }
+        ImGui::SameLine(0.0f, 10.0f);
+        if (ConsoleTheme::GhostButton("复制当前冲击力", UiIcon::Chevron, ImVec2(btnW, layout::button_h)))
+        {
+            float objectForce = 0.0f, pedForce = 0.0f, vehicleForce = 0.0f, aircraftForce = 0.0f;
+            ReadImpactForce(0xD8, objectForce);
+            ReadImpactForce(0xDC, pedForce);
+            ReadImpactForce(0xE0, vehicleForce);
+            ReadImpactForce(0xE4, aircraftForce);
+            DesiredObjectImpactForce = objectForce;
+            DesiredPedImpactForce = pedForce;
+            DesiredVehicleImpactForce = vehicleForce;
+            DesiredAircraftImpactForce = aircraftForce;
+        }
+        ConsoleTheme::BoxEnd();
+        col.Advance(1, TitledBoxPixels(boxH));
+    }
 
-	if (ImGui::Button("更新"))
-		bNeedsOverwrite = true;
-
-	ImGui::SameLine();
-
-	if (ImGui::Button("复制当前到目标"))
-		bRequestedCopyToDesired = true;
-
-	ImGui::PopStyleColor(3);
-	
-	ImGui::Spacing();
-	ImGui::Separator();
-	ImGui::Spacing();
-	
-	// 冲击力设置部分
-	ImGui::Text("让他们飞起来冲击力设置");
-	ImGui::Spacing();
-	
-	// 冲击力输入框
-	ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.13f, 0.14f, 0.17f, 1.0f));
-	ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(0.20f, 0.22f, 0.27f, 1.0f));
-	ImGui::PushStyleColor(ImGuiCol_FrameBgActive, ImVec4(0.16f, 0.18f, 0.22f, 1.0f));
-
-	// 使用双列布局显示冲击力输入框
-	ImGui::BeginTable("impact_forces_table", 2, ImGuiTableFlags_Resizable);
-
-	ImGui::TableNextRow();
-	ImGui::TableNextColumn();
-	ImGui::InputFloat("普通物体", &DesiredObjectImpactForce, 0.0f, 0.0f, "%.3f");
-	ImGui::TableNextColumn();
-	ImGui::InputFloat("行人", &DesiredPedImpactForce, 0.0f, 0.0f, "%.3f");
-
-	ImGui::TableNextRow();
-	ImGui::TableNextColumn();
-	ImGui::InputFloat("陆地载具", &DesiredVehicleImpactForce, 0.0f, 0.0f, "%.3f");
-	ImGui::TableNextColumn();
-	ImGui::InputFloat("飞行载具", &DesiredAircraftImpactForce, 0.0f, 0.0f, "%.3f");
-
-	ImGui::EndTable();
-
-	ImGui::PopStyleColor(3);
-	
-	// 冲击力设置的应用和复制按钮
-	ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.26f, 0.59f, 0.98f, 0.40f));
-	ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.26f, 0.59f, 0.98f, 0.60f));
-	ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.26f, 0.59f, 0.98f, 0.80f));
-
-	// 冲击力设置的更新按钮 - 单次更新
-	if (ImGui::Button("更新冲击力")) {
-		// 单次应用冲击力修改
-		WriteImpactForce(0xD8, DesiredObjectImpactForce); // 武器命中普通物体冲击力
-		WriteImpactForce(0xDC, DesiredPedImpactForce); // 武器对行人冲击力
-		WriteImpactForce(0xE0, DesiredVehicleImpactForce); // 武器对载具冲击力
-		WriteImpactForce(0xE4, DesiredAircraftImpactForce); // 武器对飞行目标冲击力
-	}
-
-	ImGui::SameLine();
-
-	// 冲击力设置的复制按钮
-	if (ImGui::Button("复制当前冲击力到目标")) {
-		// 读取当前冲击力数值
-		float objectImpactForce = 0.0f;
-		float pedImpactForce = 0.0f;
-		float vehicleImpactForce = 0.0f;
-		float aircraftImpactForce = 0.0f;
-		
-		// 读取各种冲击力数值
-		ReadImpactForce(0xD8, objectImpactForce);
-		ReadImpactForce(0xDC, pedImpactForce);
-		ReadImpactForce(0xE0, vehicleImpactForce);
-		ReadImpactForce(0xE4, aircraftImpactForce);
-		
-		// 赋值给目标变量
-		DesiredObjectImpactForce = objectImpactForce;
-		DesiredPedImpactForce = pedImpactForce;
-		DesiredVehicleImpactForce = vehicleImpactForce;
-		DesiredAircraftImpactForce = aircraftImpactForce;
-	}
-
-	ImGui::PopStyleColor(3);
-	
-	// 冲击力修改复选框 - 直接应用数值
-	ImGui::Checkbox("直接应用数值", &bApplyImpactForces);
-	ImGui::SameLine();
-	ImGui::TextDisabled("(?)");
-	if (ImGui::IsItemHovered()) {
-		ImGui::BeginTooltip();
-		ImGui::Text("勾选后将持续应用设置的冲击力数值");
-		ImGui::EndTooltip();
-	}
-
-	// 右侧列：武器功能选项
-	ImGui::TableNextColumn();
-
-	// 武器功能选项
-	ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.90f, 0.90f, 0.90f, 1.0f));
-	ImGui::SeparatorText("武器功能选项");
-	ImGui::PopStyleColor();
-
-	// 复选框样式
-	ImGui::PushStyleColor(ImGuiCol_CheckMark, ImVec4(0.26f, 0.59f, 0.98f, 1.0f));
-	ImGui::Checkbox("无限弹药", &bInfiniteAmmo);
-	ImGui::Checkbox("无需装弹", &bNoReload);
-	
-	// 禁用其他人武器复选框
-	ImGui::Checkbox("禁用其他人武器", &bDisableOthersWeapons);
-	ImGui::SameLine();
-	ImGui::TextDisabled("(?)");
-	if (ImGui::IsItemHovered()) {
-		ImGui::BeginTooltip();
-		ImGui::Text("使用说明：");
-		ImGui::BulletText("瞄准敌人生效");
-		ImGui::BulletText("缺点：对自己也生效");
-		ImGui::BulletText("取消需要重新瞄准敌方");
-		ImGui::EndTooltip();
-	}
-	
-	// 其他复选框
-	ImGui::Checkbox("瞄准敌人修改血量为-1", &bSetAimTargetHealthToMinusOne);
-	ImGui::SameLine();
-	ImGui::TextDisabled("(?)");
-	if (ImGui::IsItemHovered()) {
-		ImGui::BeginTooltip();
-		ImGui::Text("将瞄准的敌人血量修改为-1，使其立即死亡");
-		ImGui::EndTooltip();
-	}
-	
-	// 瞄准敌人修改防弹衣复选框
-	ImGui::Checkbox("瞄准敌人修改防弹衣为-1", &bSetAimTargetArmorToMinusOne);
-	ImGui::SameLine();
-	ImGui::TextDisabled("(?)");
-	if (ImGui::IsItemHovered()) {
-		ImGui::BeginTooltip();
-		ImGui::Text("将瞄准的敌人防弹衣修改为-1");
-		ImGui::EndTooltip();
-	}
-	
-	ImGui::Checkbox("修改其他人移动速度为10", &bModifyOthersMoveSpeed);
-	ImGui::SameLine();
-	ImGui::TextDisabled("(?)");
-	if (ImGui::IsItemHovered()) {
-		ImGui::BeginTooltip();
-		ImGui::Text("将瞄准的敌人移动速度修改为10");
-		ImGui::EndTooltip();
-	}
-	
-	// 百万瞬击复选框
-	ImGui::Checkbox("百万瞬击", &bMillionInstantHit);
-	ImGui::SameLine();
-	ImGui::TextDisabled("(?)");
-	if (ImGui::IsItemHovered()) {
-		ImGui::BeginTooltip();
-		ImGui::Text("子弹飞行速度设置为99999999");
-		ImGui::EndTooltip();
-	}
-	
-	ImGui::PopStyleColor();
-
-	ImGui::Separator();
-
-	// 一键魔改部分
-	ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.90f, 0.90f, 0.90f, 1.0f));
-	ImGui::SeparatorText("一键教训智障儿童（天机炮版本半无敌也死)");
-	ImGui::PopStyleColor();
-
-	// 一键魔改按钮
-	ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.95f, 0.45f, 0.15f, 0.40f));
-	ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.95f, 0.45f, 0.15f, 0.60f));
-	ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.95f, 0.45f, 0.15f, 0.80f));
-
-	if (ImGui::Button("一键魔改")) {
-		// Set the desired weapon properties for one-click modification
-		DesiredWepInfo.WeaponDamage = 99999.0f;
-		DesiredWepInfo.WeaponFireRate = 0.0f;
-		DesiredWepInfo.WeaponRange = 99999.0f;
-		DesiredWepInfo.WeaponPenetration = 99999.0f;
-		DesiredWepInfo.WeaponAccuracy = 0.0f;
-		DesiredWepInfo.WeaponMoveAccuracy = 0.0f;
-		DesiredWepInfo.WeaponLockRange = 99999.0f;
-		DesiredWepInfo.RecoilAmplitude = 0.0f;
-		DesiredWepInfo.ImpactType = IT_EXPLOSION; // 5
-		DesiredWepInfo.ImpactExplosion = IE_ORBITAL_CANNON; // 59 轨道炮
-		
-		// If the checkbox is checked, apply immediately
-		if (bApplyOneClickMod) {
-			bNeedsOverwrite = true;
-		}
-	}
-
-	ImGui::PopStyleColor(3);
-	
-	ImGui::SameLine();
-	
-	// 复选框样式
-	ImGui::PushStyleColor(ImGuiCol_CheckMark, ImVec4(0.26f, 0.59f, 0.98f, 1.0f));
-	ImGui::Checkbox("勾选直接应用", &bApplyOneClickMod);
-	ImGui::PopStyleColor();
-	
-	ImGui::SameLine();
-	ImGui::TextDisabled("(?)");
-	if (ImGui::IsItemHovered()) {
-		ImGui::BeginTooltip();
-		ImGui::Text("勾选后点击一键魔改按钮将直接应用修改到当前武器");
-		ImGui::EndTooltip();
-	}
-
-	// 结束表格布局
-	ImGui::EndTable();
-
-	return 1;
+    col.End();
+    return true;
 }
 
 bool WeaponInspector::Render() {
