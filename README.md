@@ -10,9 +10,9 @@
 [![License: Custom](https://img.shields.io/badge/license-Custom%20Non--Commercial-orange)](LICENSE)
 [![Release](https://img.shields.io/badge/release-v2.5-2ea44f)](https://github.com/fmc999/GTA5-DMA-CHEAT/releases/latest)
 
-基于 C++23 / Dear ImGui / DirectX 11 / MemProcFS 构建的 GTA5 DMA 外部控制台，支持 GTA5 原版与 GTA5 Enhanced 双进程自动识别。
+基于 C++23 / Dear ImGui / DirectX 11 / MemProcFS 构建的 GTA5 DMA 外部控制台，暗色玻璃拟态悬浮面板界面，支持 GTA5 原版与 GTA5 Enhanced 双进程自动识别。
 
-A GTA5 external DMA control console built with C++23 / Dear ImGui / DirectX 11 / MemProcFS, with automatic detection of both legacy GTA5 and GTA5 Enhanced.
+A GTA5 external DMA control console built with C++23 / Dear ImGui / DirectX 11 / MemProcFS — a dark glass-morphism floating panel UI, with automatic detection of both legacy GTA5 and GTA5 Enhanced.
 
 **免费发布 · 请勿贩卖 · 仅供技术研究与 DMA 读写学习**
 **Free release · Do not resell · For technical research and DMA read/write learning only**
@@ -21,15 +21,29 @@ A GTA5 external DMA control console built with C++23 / Dear ImGui / DirectX 11 /
 
 ---
 
+## v2.5 更新要点 | What's new in v2.5
+
+- **界面改版**：整体换成暗色玻璃拟态（圆角外壳 + 半透明内容盒 + 1px 分隔线 + 强调色），壁纸直接编译进 exe，无需外部图片文件
+- **悬浮面板**：面板本身就是悬浮窗 —— 默认 1180×780、顶部空白区拖动、右下角手柄缩放（最小 1180×780），几何写入 `window.ini` 记忆；**面板以外区域保持纯黑**，叠在融合器输出的另一台电脑画面上时互不遮挡
+- **战局载具**：操作由「传送到身边」（载具 → 我）翻转为 **「传送到它」（我 → 载具）** —— 直接把玩家送到该载具旁，错开 2 米防卡模
+- **页内排版**：人物控制页左功能 / 右信息；位置传送页三列瀑布流，重复点位按坐标 8 米自动合并（62 → 55 个按钮 / 8 组）
+- **修复**：内容溢出时的滚动条不可见与错位、多张功能卡的芯片按钮动画 ID 冲突
+
+*The UI is rebuilt as a dark glass-morphism floating panel (draggable, resizable, geometry persisted to `window.ini`, pure black outside the panel for compositor / dual-PC setups) with the wallpaper embedded in the exe. The vehicle-list action is flipped to **teleport-to-vehicle** (player → vehicle, 2 m offset). Pages are re-laid-out (player page: features left / telemetry right; teleport page: three-column flow with coordinate-based dedupe, 62 → 55 buttons). Scroll-overflow and chip-animation-ID issues are fixed. Full history: [Releases](https://github.com/fmc999/GTA5-DMA-CHEAT/releases).*
+
 ## 界面预览 | Screenshots
 
 ![Console UI](docs/screenshot-console.png)
 
-![Session Players](docs/screenshot-session-page.png)
+悬浮玻璃面板：页眉品牌与状态胶囊（DMA / 进程 / 主机热键 / FPS）、左侧导航（人物控制 / 载具编辑 / 武器功能 / 战局玩家 / 位置传送 / 系统设置）、右侧工作区分组卡片、底部状态栏实时显示 PID / 基址 / 模型哈希与热键提示。面板可拖动与缩放，几何与外观写入 `window.ini`；面板以外区域保持纯黑。
 
-单窗口控制台布局：页眉状态胶囊（DMA / 进程 / 主机热键 / FPS）、可折叠侧边栏（快速控制 + 模块导航）、工作区分区内容、底部状态栏实时显示 PID / 基址 / 模型哈希。内置 4 套配色主题（午夜蓝 / 石墨灰 / 海洋青 / 绯红），位置大小与主题自动记忆。
+Floating glass panel: header brand and status pills (DMA / process / host hotkeys / FPS), left navigation, grouped workspace cards, and a status bar with live PID / base address / model hash plus hotkey hints. The panel is draggable and resizable, with geometry and appearance persisted to `window.ini`, and everything outside the panel stays pure black.
 
-Single-window console layout: header status pills (DMA / process / hotkeys / FPS), collapsible sidebar (quick toggles + module navigation), sectioned workspace, and a status bar showing PID / base address / model hash live. Four built-in color themes (Midnight / Graphite / Ocean / Crimson), with window geometry and theme auto-persisted.
+![Vehicle list](docs/screenshot-vehicle-list.png)
+
+战局载具表格：车名（24 款常用车型映射）/ 血量 / 距离，右侧「传送到它」把玩家直接送到该载具旁（错开 2 米防卡模）。
+
+Session-vehicle table: model name (24 common models mapped) / health / distance, with a one-click **teleport-to-vehicle** button that sends the player next to that vehicle (offset by 2 m to avoid clipping).
 
 ## 功能 | Features
 
@@ -71,16 +85,19 @@ Single-window console layout: header status pills (DMA / process / hotkeys / FPS
 - Weapon stats readout (damage / fire rate / range / recoil / accuracy), infinite ammo, no-reload, impact and bullet-speed tuning.
 
 ### 位置传送 | Teleport
-- 自定义坐标与 60+ 预设位置（任务点位齐全）
+- 自定义坐标 + 55 个预设点位（8 组：通用 / 赌场金库 / 赌场前置 / 赌场任务 / 佩里克岛前置 / 佩里克岛别墅外 / 佩里克岛战利品 / 佩里克岛撤离）
+- 重复点位按坐标 8 米就近自动合并为一个按钮，原名并入按钮标签（62 → 55）
 - `F5` 传送到地图标记点 · `F6` 传送到任务点（Enhanced）
 - 人物与载具状态自动处理（上车传送、高度修正）
-- Custom coordinates and 60+ preset locations (full mission coverage), `F5` waypoint / `F6` objective teleport (Enhanced), with vehicle-in/out and height correction handled automatically.
+- Custom coordinates plus 55 preset locations in 8 groups, with duplicates within 8 m merged into one button by coordinate (62 → 55); `F5` waypoint / `F6` objective teleport (Enhanced), with vehicle-in/out and height correction handled automatically.
 
 ### 界面与运行 | UI & Runtime
+- 悬浮玻璃面板：拖动 / 右下角缩放（最小 1180×780）/ `window.ini` 几何记忆；面板外纯黑
+- 壁纸编译进 exe（原图 + 预模糊副本），中文字形完整内嵌
+- 设置页可切换明暗模式与强调色、收起侧边栏；操作有 Toast 反馈
 - DMA 读写线程与 UI 线程分离，Scatter 批量读写降低 PCIe 带宽占用
 - 主机及目标机双端热键检测
-- Toast 操作反馈、窗口状态记忆、4 套主题实时切换
-- Separate DMA / UI threads with scatter batch reads to reduce PCIe traffic, dual-end hotkeys (host + target), toast feedback, window state persistence, live theme switching.
+- A draggable / resizable floating glass panel (min 1180×780, geometry persisted to `window.ini`, pure black outside it); wallpaper (and a pre-blurred copy) plus full CJK glyph ranges embedded in the exe; light/dark mode, accent color and sidebar-collapse switches in Settings with toast feedback; separate DMA / UI threads with scatter batch reads to cut PCIe traffic; dual-end hotkeys (host + target).
 
 ## 环境要求 | Requirements
 
@@ -135,9 +152,10 @@ Pushing to `main` triggers the [MSBuild workflow](.github/workflows/msbuild.yml)
 2. 在目标主机启动 GTA5 或 GTA5 Enhanced
 3. 在控制主机运行 `GTA5_DMA.exe`
 4. 等待页眉状态胶囊显示 DMA 与游戏进程已连接
-5. 通过左侧导航进入功能页面
+5. 通过左侧导航进入功能页面；拖动面板顶部空白区可移动，拖右下角手柄可缩放（几何记在 `%LOCALAPPDATA%\GTA5_DMA\window.ini`）
+6. 设置页 → 外观：切换明暗模式与强调色；界面：收起侧边栏
 
-*Ensure the DMA device and MemProcFS driver environment are ready (`vmm.dll` / `leechcore.dll` next to the exe). Start GTA5 / GTA5 Enhanced on the target machine, run `GTA5_DMA.exe` on the control machine, wait for the header pills to show DMA and game process connected, then navigate via the sidebar.*
+*Ensure the DMA device and MemProcFS driver environment is ready (`vmm.dll` / `leechcore.dll` next to the exe). Start GTA5 / GTA5 Enhanced on the target machine, run `GTA5_DMA.exe` on the control machine, wait for the header pills to show DMA and game process connected, then navigate via the sidebar. Drag the panel's empty header area to move it and the bottom-right grip to resize (geometry persisted in `%LOCALAPPDATA%\GTA5_DMA\window.ini`); Settings → Appearance switches light/dark mode and accent color.*
 
 ### 快捷键 | Hotkeys
 
@@ -166,15 +184,22 @@ GTA5_DMA/
 │   │   ├── GodMode / NoWanted / RefreshHealth / HealthManager / ArmorManager
 │   │   ├── Invisibility / NoCollision / PlayerSpeed / Ragdoll
 │   │   ├── PlayerList          # 战局玩家（加密 Ped 池 + 统计 + 操作）
-│   │   ├── VehicleList         # 战局载具（载具池扫描 + 传送）
+│   │   ├── VehicleList         # 战局载具（载具池扫描 + 传送到它）
 │   │   └── Teleport / VehicleEditor / WeaponInspector / Locations
 │   ├── UI/                     # 界面层
 │   │   ├── MyImGui.*           # DX11 + Win32 平台层（窗口 / 设备 / 主循环）
-│   │   ├── ConsoleShell.*      # 单窗口布局：页眉 / 可折叠侧边栏 / 工作区 / 状态栏
-│   │   ├── ConsoleTheme.*      # 主题系统 + 共享控件（ToggleRow / NavItem / StatPill）
+│   │   ├── ConsoleShell.*      # 悬浮面板布局：页眉 / 侧边导航 / 工作区 / 状态栏
+│   │   ├── ConsoleTheme.*      # 玻璃主题、明暗与强调色 + 共享控件
+│   │   ├── Backdrop.*          # 壁纸与预模糊副本绘制（面板内外分区）
+│   │   ├── EmbeddedAssets.h    # 编译进 exe 的壁纸与字体数据
+│   │   ├── AppFonts.h          # 字体加载（正文 / 粗体 / 品牌字）
+│   │   ├── GlyphRanges.h       # 中文完整字形范围
 │   │   ├── UiToast.*           # Toast 操作反馈通知
-│   │   ├── WindowState.*       # 窗口几何 / 主题 / 开关状态持久化
+│   │   ├── WindowState.*       # 面板几何 / 外观 / 开关状态持久化
 │   │   └── MenuManager.*       # 页面状态与各页面内容
+│   ├── assets/                 # 壁纸原图、预模糊副本、品牌字体
+│   ├── external/               # stb_image.h（壁纸解码）
+│   ├── tools/                  # gen_embedded_assets.py / gen_glyph_ranges.py
 │   └── Attic/                  # 已停用功能（源码保留，便于恢复）
 │       ├── TimeControl / HeistDividend / PlayerChaser / Dev
 │       └── LegacyPages.cpp     # 停用功能的页面 UI 存档
@@ -198,7 +223,8 @@ main.cpp
 - **线程模型**：UI 与 DMA 读写完全分离，通过原子变量通信，无锁
 - **内存访问**：统一走 `MemoryBackend`（VMMDLL 封装），关键路径使用 Scatter 批量读写
 - **偏移管理**：启动时 `OffsetResolver` 特征码动态解析（主/备双链），失败回落 `Offsets.h` 静态双版本表
-- **Threading**: UI and DMA threads are fully decoupled and communicate via atomics (lock-free). **Memory**: all access goes through `MemoryBackend` (VMMDLL wrapper) with scatter batches on hot paths. **Offsets**: resolved at startup by `OffsetResolver` (primary/backup signature chains) with static-table fallback.
+- **界面**：`ConsoleShell` 用 ImDrawList 直绘玻璃面板（外壳 / 内容盒 / 分隔线），`Backdrop` 负责壁纸分区绘制，页面内容由 `MenuManager` 提供
+- **Threading**: UI and DMA threads are fully decoupled and communicate via atomics (lock-free). **Memory**: all access goes through `MemoryBackend` (VMMDLL wrapper) with scatter batches on hot paths. **Offsets**: resolved at startup by `OffsetResolver` (primary/backup signature chains) with static-table fallback. **UI**: `ConsoleShell` paints the glass panel directly with ImDrawList, `Backdrop` handles wallpaper partitioning, and page bodies come from `MenuManager`.
 
 ## 测试 | Tests
 
@@ -224,9 +250,10 @@ tests\x64\Debug\DmaInfrastructureTests.exe
 ## 已知限制 | Known Limitations
 
 - 时间控制、任务分红、追战局功能已停用（源码保留于 `Attic/`）
-- 战局载具传送仅对静止载具有效（移动中载具导航位置会被物理引擎覆盖）
+- 战局载具的「传送到它」把玩家送到目标载具旁（错开 2 米）；目标载具若正在移动，落点按读取瞬间的坐标计算，可能落在车后
+- 面板以外区域刻意保持纯黑（融合器叠加用），不是渲染失败
 - 无 BattlEye 主动绕过；Enhanced 在线模式行为不受本工具保证
-- Time control / heist dividend / session chaser are retired (sources kept in `Attic/`). Session-vehicle teleport only works on stationary vehicles (physics overrides navigation on moving ones). No active BattlEye bypass; Enhanced online behavior is not guaranteed.
+- Time control / heist dividend / session chaser are retired (sources kept in `Attic/`). Teleport-to-vehicle sends the player next to the target vehicle with a 2 m offset; if that vehicle is moving, the landing spot uses the coordinates sampled at read time. The pure-black area outside the panel is intentional (for compositor overlays). No active BattlEye bypass; Enhanced online behavior is not guaranteed.
 
 ## 免责声明 | Disclaimer
 
