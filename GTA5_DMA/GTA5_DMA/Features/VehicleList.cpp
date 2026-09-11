@@ -19,8 +19,11 @@ namespace
     std::atomic<bool> g_VehicleActive{ false };
 
     std::atomic<uint32_t> g_PendingSpawnModel{ 0 };
-    std::atomic<uintptr_t> g_PendingTeleportFull{ 0 };
-    std::atomic<uintptr_t> g_PendingTeleportToVehicle{ 0 };   // 我 → 载具
+    std::atomic<uintptr_t> g_PendingTeleportToVehicle{ 0 };   // 我 → 载具（载具页「传送到它」唯一入口）
+
+    // 最近一次「我 → 载具」的落地报告（UI 线程读 → 页面上显示方向/落点/读回校验）
+    std::mutex g_TpReportMutex;
+    TpToVehicleReport g_TpReport;
 
     constexpr auto kRefreshInterval = std::chrono::milliseconds(700);
     std::chrono::steady_clock::time_point g_LastRefresh{};
@@ -161,23 +164,12 @@ void VehicleList::RequestSpawn(uint32_t modelHash)
     g_PendingSpawnModel.store(modelHash);
 }
 
-void VehicleList::RequestTeleportVehicle(uintptr_t vehicleAddress)
-{
-    if (vehicleAddress == 0)
-        return;
-    g_PendingTeleportFull.store(vehicleAddress);
-}
-
 void VehicleList::OnDMAFrame()
 {
     const auto now = std::chrono::steady_clock::now();
 
-    // 处理传送请求（立即，不节流）
-    const uintptr_t pendingAddr = g_PendingTeleportFull.exchange(0);
-    if (pendingAddr)
-        TeleportVehicleToPlayer(pendingAddr);
-
-    // 我 → 载具（立即处理）
+    // 我 → 载具（立即处理，不节流）——「传送到它」的唯一入口。
+    // 方向契约：本分支只写本地玩家的导航位置；目标载具的导航位置绝不被写入。
     const uintptr_t pendingToVehicle = g_PendingTeleportToVehicle.exchange(0);
     if (pendingToVehicle)
         TeleportPlayerToVehicle(pendingToVehicle);
@@ -207,6 +199,8 @@ void VehicleList::OnDMAFrame()
     RefreshVehicles();
 }
 
+// ⚠ 方向：载具 → 我（把载具拉到我身边）。只服务于「刷车」（RequestSpawn）。
+//    载具页的「传送到它」不经过这里——那条路是 TeleportPlayerToVehicle（我 → 它）。
 void VehicleList::TeleportVehicleToPlayer(uintptr_t vehicleAddress)
 {
     // 载具位置 = CNavigation+0x50（与玩家传送同链）。写到本地玩家前方 5 米，
@@ -232,67 +226,159 @@ void VehicleList::TeleportVehicleToPlayer(uintptr_t vehicleAddress)
     std::println("[VehicleList] 已传送载具 0x{:X} 到身边", vehicleAddress);
 }
 
-void VehicleList::RequestTeleportToVehicle(uintptr_t vehicleAddress)
+void VehicleList::RequestTeleportToVehicle(uintptr_t vehicleAddress, uint32_t displayIndex)
 {
     if (vehicleAddress == 0)
         return;
+
+    {
+        std::lock_guard<std::mutex> lock(g_TpReportMutex);
+        g_TpReport.Sent = true;
+        g_TpReport.Ok = false;
+        g_TpReport.Index = displayIndex;
+        g_TpReport.Vehicle = vehicleAddress;
+        g_TpReport.Me[0] = DMA::LocalPlayerLocation.x;
+        g_TpReport.Me[1] = DMA::LocalPlayerLocation.y;
+        g_TpReport.Me[2] = DMA::LocalPlayerLocation.z;
+        g_TpReport.VehiclePos[0] = g_TpReport.VehiclePos[1] = g_TpReport.VehiclePos[2] = 0.0f;
+        g_TpReport.Landed[0] = g_TpReport.Landed[1] = g_TpReport.Landed[2] = 0.0f;
+    }
+
     g_PendingTeleportToVehicle.store(vehicleAddress);
+}
+
+TpToVehicleReport VehicleList::GetLastTeleport()
+{
+    std::lock_guard<std::mutex> lock(g_TpReportMutex);
+    return g_TpReport;
+}
+
+bool VehicleList::IsLocalPlayerInVehicle()
+{
+    if (DMA::LocalPlayerAddress == 0)
+        return false;
+    uint8_t bits = 0;
+    if (!DMA::Memory().Read(DMA::LocalPlayerAddress + offsetof(PED, InVehicleBits), &bits, sizeof(bits)))
+        return false;
+    return (bits & 0x1) != 0;
 }
 
 void VehicleList::TeleportPlayerToVehicle(uintptr_t vehicleAddress)
 {
-    // 我 → 它：把本地玩家的导航位置写到目标载具所在处。
-    // 写入链与 PlayerList::TeleportToPlayer 一致（本地玩家 CNavigation+0x50；
-    // 若我正坐在载具里，同时写载具导航位置，否则人会掉在车外）。
-    if (DMA::NavigationAddress == 0)
-        return;
-
-    const auto& me = DMA::LocalPlayerLocation;
-    if (me.x == 0.0f && me.y == 0.0f)
-        return;   // 自己的坐标还没读到，别往 (0,0,0) 传
-
-    // 目标坐标：优先实时读该载具 CNavigation+0x50，读不到再退回本轮快照
-    Vec3 target = {};
-    uintptr_t nav = 0;
-    if (DMA::Memory().Read(vehicleAddress + offsetof(CVehicle, pCNavigation), &nav, sizeof(nav)) && nav)
-        DMA::Memory().Read(nav + 0x50, &target, sizeof(target));
-
-    if (target.x == 0.0f && target.y == 0.0f && target.z == 0.0f)
+    // ── 方向契约（不要再改回「载具 → 我」）────────────────────────────
+    // 我 → 它：只把「本地玩家的导航位置」写到目标载具所在处。
+    // 目标载具自己的 CNavigation 在本函数内【绝不写入】；唯一例外是玩家确实坐在
+    // 载具里时同步写"自己的"载具导航（否则人会掉出车外），且必须 InVehicleBits 为真——
+    // 旧版没做这个确认，PED.pCVehicle 的残留旧指针会把一辆已经下车的载具一起拖到落点，
+    // 看上去就像"车跟着人跑 / 车被拉到我这"。
+    if (vehicleAddress == 0 || DMA::NavigationAddress == 0)
     {
-        auto snapshot = GetSnapshot();
+        std::println("[TP2VEH] 跳过: 地址未就绪 veh=0x{:X} nav=0x{:X}", vehicleAddress, DMA::NavigationAddress);
+        return;
+    }
+
+    const Vec3 me = DMA::LocalPlayerLocation;
+    if (me.x == 0.0f && me.y == 0.0f)
+    {
+        std::println("[TP2VEH] 跳过: 本地玩家坐标未就绪（等待首帧定位）");
+        return;
+    }
+
+    // 点到自己正坐着的这辆车 → 无事可做（否则等于把自己传送到原地）
+    if (DMA::VehicleAddress != 0 && vehicleAddress == DMA::VehicleAddress)
+    {
+        std::println("[TP2VEH] 跳过: 目标就是你正坐的载具 0x{:X}", vehicleAddress);
+        return;
+    }
+
+    // 目标坐标：优先用「列表里显示的那一份快照坐标」——用户点哪一行、看到多少米，
+    // 就落到哪里（所见即所得）；快照里找不到才实时走指针链补读一次。
+    Vec3 vehiclePos = {};
+    bool haveTarget = false;
+    {
+        const std::vector<SessionVehicle> snapshot = GetSnapshot();
         for (const SessionVehicle& v : snapshot)
         {
             if (v.Address == vehicleAddress)
             {
-                target = { v.Position[0], v.Position[1], v.Position[2] };
+                vehiclePos = { v.Position[0], v.Position[1], v.Position[2] };
+                haveTarget = (vehiclePos.x != 0.0f || vehiclePos.y != 0.0f || vehiclePos.z != 0.0f);
                 break;
             }
         }
     }
-
-    if (target.x == 0.0f && target.y == 0.0f && target.z == 0.0f)
+    if (!haveTarget)
     {
-        std::println("[VehicleList] 传送到它失败: 载具坐标读不到 0x{:X}", vehicleAddress);
+        uintptr_t nav = 0;
+        if (DMA::Memory().Read(vehicleAddress + offsetof(CVehicle, pCNavigation), &nav, sizeof(nav)) && nav)
+        {
+            Vec3 live = {};
+            if (DMA::Memory().Read(nav + 0x50, &live, sizeof(live)))
+            {
+                vehiclePos = live;
+                haveTarget = (live.x != 0.0f || live.y != 0.0f || live.z != 0.0f);
+            }
+        }
+    }
+    if (!haveTarget)
+    {
+        std::println("[TP2VEH] 失败: 载具坐标读不到 0x{:X}", vehicleAddress);
+        return;
+    }
+
+    const float gapX = vehiclePos.x - me.x;
+    const float gapY = vehiclePos.y - me.y;
+    const float gap = std::sqrt(gapX * gapX + gapY * gapY);
+    if (gap < 2.5f)
+    {
+        std::println("[TP2VEH] 跳过: 目标已在你旁边（{:.1f} 米）", gap);
         return;
     }
 
     // 错开 2 米防卡模（与玩家传送同一约定）
+    Vec3 target = vehiclePos;
     target.x += 2.0f;
     target.y += 2.0f;
 
     if (!DMA::Memory().Write(DMA::NavigationAddress + offsetof(CNavigation, Position), &target, sizeof(target)))
     {
-        std::println("[VehicleList] 传送到它失败: 玩家导航位置写入失败");
+        std::println("[TP2VEH] 失败: 玩家导航位置写入失败 nav=0x{:X}", DMA::NavigationAddress);
         return;
     }
-    if (DMA::VehicleNavigationAddress != 0)
+
+    // 载具内同步：只有"确实坐在载具里"才写自己的载具导航（防止残留指针把旧车拖走）
+    const bool inVehicle = IsLocalPlayerInVehicle();
+    if (inVehicle && DMA::VehicleNavigationAddress != 0 && DMA::VehicleNavigationAddress != DMA::NavigationAddress)
     {
         DMA::Memory().Write(
             DMA::VehicleNavigationAddress + offsetof(CNavigation, Position), &target, sizeof(target));
     }
 
-    std::println("[VehicleList] 已把玩家传送到载具 0x{:X} -> ({:.1f}, {:.1f}, {:.1f})",
-                 vehicleAddress, target.x, target.y, target.z);
+    // 读回校验：确认玩家导航真的落到了目标点
+    Vec3 readback = {};
+    const bool ok = DMA::Memory().Read(DMA::NavigationAddress + offsetof(CNavigation, Position), &readback, sizeof(readback)) &&
+                    std::fabs(readback.x - target.x) < 1.0f &&
+                    std::fabs(readback.y - target.y) < 1.0f;
+
+    {
+        std::lock_guard<std::mutex> lock(g_TpReportMutex);
+        g_TpReport.Ok = ok;
+        g_TpReport.Me[0] = me.x;
+        g_TpReport.Me[1] = me.y;
+        g_TpReport.Me[2] = me.z;
+        g_TpReport.VehiclePos[0] = vehiclePos.x;
+        g_TpReport.VehiclePos[1] = vehiclePos.y;
+        g_TpReport.VehiclePos[2] = vehiclePos.z;
+        g_TpReport.Landed[0] = target.x;
+        g_TpReport.Landed[1] = target.y;
+        g_TpReport.Landed[2] = target.z;
+    }
+
+    std::println("[TP2VEH] dir=我->它 veh=0x{:X} 我=({:.1f},{:.1f},{:.1f}) 载具=({:.1f},{:.1f},{:.1f}) "
+                 "落点=({:.1f},{:.1f},{:.1f}) 载具内={} 读回=({:.1f},{:.1f}) ok={}",
+                 vehicleAddress, me.x, me.y, me.z, vehiclePos.x, vehiclePos.y, vehiclePos.z,
+                 target.x, target.y, target.z, inVehicle ? "是" : "否",
+                 readback.x, readback.y, ok ? 1 : 0);
 }
 
 std::vector<SessionVehicle> VehicleList::GetSnapshot()

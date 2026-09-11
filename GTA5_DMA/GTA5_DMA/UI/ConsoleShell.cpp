@@ -344,10 +344,11 @@ void RenderFooter(const ImVec2& min, const ImVec2& max)
     const float y = min.y + (max.y - min.y - size) * 0.5f;
 
     char left[160];
-    std::snprintf(left, sizeof(left), "PID %lu   ·   基址 0x%llX   ·   人物模型 0x%08X",
+    std::snprintf(left, sizeof(left), "PID %lu   ·   基址 0x%llX   ·   人物模型 0x%08X   ·   构建 %s",
                   static_cast<unsigned long>(DMA::PID),
                   static_cast<unsigned long long>(DMA::BaseAddress),
-                  DMA::LocalPlayerModelHash);
+                  DMA::LocalPlayerModelHash,
+                  DMA::BuildTag);
     ConsoleTheme::Text(drawList, smallFont, ImVec2(min.x, y), ConsoleTheme::U32(ConsoleTheme::Ink(0.46f), 1.0f), left);
 
     // 键位提示：每组占等宽槽位（键帽统一 30px、标签统一宽度），四组严格对齐。

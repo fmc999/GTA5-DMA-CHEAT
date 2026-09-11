@@ -26,6 +26,18 @@ struct SessionVehicle
     char ModelName[20] = {0};    // 常见模型哈希 → 名字（内置映射）
 };
 
+// 「传送到它」（我 → 载具）最近一次落地报告：载具页直接显示，便于实机核对方向与落点。
+struct TpToVehicleReport
+{
+    bool Sent = false;              // 是否收到过请求
+    bool Ok = false;                // 写入 + 读回校验是否通过
+    uint32_t Index = 0;             // 列表里的显示序号
+    uintptr_t Vehicle = 0;          // 目标 CVehicle 地址
+    float Me[3] = {0, 0, 0};        // 传送前的玩家坐标
+    float VehiclePos[3] = {0, 0, 0};// 目标载具坐标（与列表显示同源）
+    float Landed[3] = {0, 0, 0};    // 实际写入的落点（错开 2 米后）
+};
+
 class VehicleList
 {
 public:
@@ -39,16 +51,22 @@ public:
     static bool IsActive();
     static int GetVehicleCount();
 
-    // 刷车（DMA 线程消费）：把指定载具传送到本地玩家身边
+    // 刷车（DMA 线程消费）：把指定载具传送到本地玩家身边（载具 → 我）
     // modelHash=0 表示"最近的一辆"
     static void RequestSpawn(uint32_t modelHash);
-    static void RequestTeleportVehicle(uintptr_t vehicleAddress);   // 指定载具传送到身边（载具 → 我）
-    static void RequestTeleportToVehicle(uintptr_t vehicleAddress); // 我 → 指定载具（传送到它）
+
+    // 我 → 指定载具：载具页「传送到它」= 把玩家送到那辆车旁边（错开 2 米防卡模）。
+    // 方向契约：只写玩家导航位置；目标载具的导航位置绝不被写入。
+    static void RequestTeleportToVehicle(uintptr_t vehicleAddress, uint32_t displayIndex = 0);
+
+    // 最近一次「我 → 载具」的落地报告（线程安全，UI 线程读取用于显示）
+    static TpToVehicleReport GetLastTeleport();
 
 private:
     static void RefreshVehicles();
-    static void TeleportVehicleToPlayer(uintptr_t vehicleAddress);
-    static void TeleportPlayerToVehicle(uintptr_t vehicleAddress);
+    static void TeleportVehicleToPlayer(uintptr_t vehicleAddress);   // 载具 → 我（仅刷车使用）
+    static void TeleportPlayerToVehicle(uintptr_t vehicleAddress);   // 我 → 载具（载具页按钮）
+    static bool IsLocalPlayerInVehicle();
 
     // 内置常见载具哈希 → 显示名（完整表太大，只放常用的）
     static const char* LookupModelName(uint32_t hash);

@@ -320,6 +320,33 @@ void MenuManager::RenderVehiclePageContent()
     {
         showSessionVehicles = !showSessionVehicles;
     }
+    // 方向说明（常显）：点「传送到它」= 把你送到那辆车旁边（我 → 载具），
+    // 方向不会反过来把车拉过来；构建标记用于确认正跑的 exe 是不是最新修复版。
+    ImGui::TextDisabled("方向: 你 → 载具（错开 2 米防卡模） · 构建 %s", DMA::BuildTag);
+    {
+        // 自检：这一行渲染时把方向/构建标记写进 ui_check.txt，
+        // 实机上点完按钮可直接把 ui_check.txt 发回来核对是哪条分支。
+        char dirTrace[128] = {};
+        std::snprintf(dirTrace, sizeof(dirTrace), "NOTE TP2VEHUI build=%s dir=me->veh", DMA::BuildTag);
+        ConsoleTheme::TraceNote(dirTrace);
+
+        const TpToVehicleReport rep = VehicleList::GetLastTeleport();
+        if (rep.Sent)
+        {
+            ImGui::TextDisabled("最近一次: 你 → 载具 #%u  落点 (%.1f, %.1f, %.1f)  读回校验 %s",
+                                rep.Index, rep.Landed[0], rep.Landed[1], rep.Landed[2],
+                                rep.Ok ? "通过" : "未通过");
+
+            char resTrace[192] = {};
+            std::snprintf(resTrace, sizeof(resTrace),
+                          "NOTE TP2VEH #%u veh=0x%llX 载具=(%.1f,%.1f,%.1f) 落点=(%.1f,%.1f,%.1f) ok=%d",
+                          rep.Index, (unsigned long long)rep.Vehicle,
+                          rep.VehiclePos[0], rep.VehiclePos[1], rep.VehiclePos[2],
+                          rep.Landed[0], rep.Landed[1], rep.Landed[2], rep.Ok ? 1 : 0);
+            ConsoleTheme::TraceNote(resTrace);
+        }
+    }
+
     if (!showSessionVehicles)
         return;
 
@@ -369,9 +396,14 @@ void MenuManager::RenderVehiclePageContent()
                 ImGui::TableNextColumn();
                 if (ImGui::Button("传送到它"))
                 {
-                    // 我 → 载具：把玩家送到这辆车的位置（错开 2 米防卡模）
-                    VehicleList::RequestTeleportToVehicle(v.Address);
-                    UiToast::Show("已把玩家传送到该载具（错开 2 米防卡模）", ToastKind::Info);
+                    // 我 → 载具：把玩家送到这一行载具的位置（错开 2 米防卡模）。
+                    // 目标坐标 = 本行显示的那份快照值，所见即所得。
+                    VehicleList::RequestTeleportToVehicle(v.Address, v.DisplayIndex);
+                    char tpMsg[160] = {};
+                    std::snprintf(tpMsg, sizeof(tpMsg),
+                                  "你 → 载具 #%u  (%.1f, %.1f) 错开 2 米 [%s]",
+                                  v.DisplayIndex, v.Position[0], v.Position[1], DMA::BuildTag);
+                    UiToast::Show(tpMsg, ToastKind::Info);
                 }
 
                 ImGui::PopID();
