@@ -8,7 +8,7 @@
 [![DMA](https://img.shields.io/badge/DMA-MemProcFS%20%2F%20FPGA-8A2BE2)](https://github.com/ufrisk/MemProcFS)
 [![Build](https://github.com/fmc999/GTA5-DMA-CHEAT/actions/workflows/msbuild.yml/badge.svg)](https://github.com/fmc999/GTA5-DMA-CHEAT/actions/workflows/msbuild.yml)
 [![License: Custom](https://img.shields.io/badge/license-Custom%20Non--Commercial-orange)](LICENSE)
-[![Release](https://img.shields.io/badge/release-v2.6-2ea44f)](https://github.com/fmc999/GTA5-DMA-CHEAT/releases/latest)
+[![Release](https://img.shields.io/badge/release-v2.5-2ea44f)](https://github.com/fmc999/GTA5-DMA-CHEAT/releases/latest)
 
 基于 C++23 / Dear ImGui / DirectX 11 / MemProcFS 构建的 GTA5 DMA 外部控制台，暗色玻璃拟态悬浮面板界面，支持 GTA5 原版与 GTA5 Enhanced 双进程自动识别。
 
@@ -21,7 +21,7 @@ A GTA5 external DMA control console built with C++23 / Dear ImGui / DirectX 11 /
 
 ---
 
-## v2.6 修复 | What's fixed in v2.6
+## 载具传送方向修复（随主线修复，未单独发版）| Vehicle-teleport direction fix (mainline, no separate release)
 
 - **载具传送方向**：彻底修掉运行时残留的「载具 → 我」写入分支 —— 现在「传送到它」只把**玩家**写进该载具旁的落点（取该载具 `CNavigation+0x50`，读不到退回快照位置；错开 2 米防卡模），绝不会把车拽向玩家
 - **页首方向说明**：载具页顶部常显 `方向: 你 → 载具（错开 2 米防卡模） · 构建 <版本标记>`，点完按钮后在下方显示「最近一次」落点与读回校验结果
