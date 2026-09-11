@@ -309,19 +309,9 @@ void MenuManager::RenderTeleportPageContent()
 
 void MenuManager::RenderVehiclePageContent()
 {
-    VehicleEditor::RenderContent();
-
-    ImGui::Dummy(ImVec2(0.0f, 12.0f));
-
-    // 战局载具：默认折叠（主区是载具编辑），展开后显示池扫描表
-    static bool showSessionVehicles = false;
-    ConsoleTheme::SectionHeader("战局载具", showSessionVehicles ? "点击标题收起" : "实时扫描载具池，点击展开");
-    if (ConsoleTheme::NavItem(showSessionVehicles ? "收起载具扫描" : "展开载具扫描", false))
-    {
-        showSessionVehicles = !showSessionVehicles;
-    }
-    // 方向说明（常显）：点「传送到它」= 把你送到那辆车旁边（我 → 载具），
+    // 方向说明（页首常显）：点「传送到它」= 把你送到那辆车旁边（我 → 载具），
     // 方向不会反过来把车拉过来；构建标记用于确认正跑的 exe 是不是最新修复版。
+    // 放页首的原因：不展开「战局载具」也能一眼看到方向与版本。
     ImGui::TextDisabled("方向: 你 → 载具（错开 2 米防卡模） · 构建 %s", DMA::BuildTag);
     {
         // 自检：这一行渲染时把方向/构建标记写进 ui_check.txt，
@@ -345,6 +335,19 @@ void MenuManager::RenderVehiclePageContent()
                           rep.Landed[0], rep.Landed[1], rep.Landed[2], rep.Ok ? 1 : 0);
             ConsoleTheme::TraceNote(resTrace);
         }
+    }
+    ImGui::Dummy(ImVec2(0.0f, 10.0f));
+
+    VehicleEditor::RenderContent();
+
+    ImGui::Dummy(ImVec2(0.0f, 12.0f));
+
+    // 战局载具：默认折叠（主区是载具编辑），展开后显示池扫描表
+    static bool showSessionVehicles = false;
+    ConsoleTheme::SectionHeader("战局载具", showSessionVehicles ? "点击标题收起" : "实时扫描载具池，点击展开");
+    if (ConsoleTheme::NavItem(showSessionVehicles ? "收起载具扫描" : "展开载具扫描", false))
+    {
+        showSessionVehicles = !showSessionVehicles;
     }
 
     if (!showSessionVehicles)
