@@ -44,7 +44,10 @@ Session-vehicle table: model name (24 common models mapped) / health / distance,
 
 ### 战局玩家 | Session Players ⭐
 - YimMenuV2 加密 Ped 池扫描（`PoolEncryption` + rotl64 解密 → `fwBasePool` 迭代）
-- 实时显示：名称 / RID / 等级 / 金钱 / RP / K/D / 血量 / 护甲 / 距离 / 载具状态 / 无敌 / 通缉
+- 实时显示（9 列）：序号 / 名称 / RID / 血量 / 护甲 / 距离 / **载具** / **BE** / 状态；数字列右对齐，载具列悬浮可看型号名与哈希
+- **BE 封禁自动查询**：进战局后自动为每个玩家查询 BattlEye 封禁状态并标在「BE」列（`封` / `正常` / `排队`），结果落盘 `be_bans_cache.json`（24 小时内复用、不重复查询）
+- BE 查询走 **BattlEye 官方服务端库**（`BEServer_x64.dll`，纯本地、无浏览器、与游戏版本无关）；一次会话并行 10 个 RID —— 实测 20 人约 70 秒查完，封禁理由与第三方站点逐字一致
+- BE 查询**只读**：只在你说要查时才动作，不写任何游戏内存
 - 操作：传送到玩家（我 → 他）、拉到我这里（他 → 我）、击杀（血量清零），两种传送都错开 2 米防卡模，页面显示最近一次落点与读回校验
 - 玩家加入/离开通知（默认关闭，设置页可开）；名字搜索过滤
 - YimMenuV2 encrypted ped-pool scanning (`PoolEncryption` + rotl64 decrypt → `fwBasePool` iteration), live per-player name / RID / rank / money / RP / K-D / health / armor / distance / in-vehicle / god / wanted, teleport-to-player and kill actions, join/leave notifications (default off) and a name search filter.
@@ -89,13 +92,18 @@ Session-vehicle table: model name (24 common models mapped) / health / distance,
 |---|---|---|---|
 | 寻址方式 | GlobalPtr / LocalScriptsPtr / GTAPlusPtr 特征码 | 自动重解析 | 每条偏移内置 4 个备选特征码，逐条扫描 + 落点校验 |
 | 运行时数据 | tunable 索引、脚本全局分块、线程名单与栈地址 | 每次启动重算 | 名字「joaat 哈希」稳定 → 查 tunables.bin；再兜底「值序列自发现」 |
-| 编译期常量 | 结构体字段偏移（Reclass.h） | 大版本可能要改 | 全部经由体检/读回校验，不会写错地址 |
+| 编译期常量 | 结构体字段偏移（Reclass.h） | **改文本即可** | 已搬进 `GTA5_DMA_offsets.txt`（见下），首次运行自动生成带注释模板 |
 
-**免重编译的三条外部通道**（都在 exe 同目录，改文本即可，游戏更新后用）：
+**免重编译的四条外部通道**（都在 exe 同目录，改文本即可，游戏更新后用）：
 
 - `GTA5_DMA_tunables.txt` —— 手填「名字 = 索引」覆盖；也可写 `bin = <路径>` 指向别的 tunables.bin
 - `GTA5_DMA_patterns.txt` —— 追加特征码（`GlobalPtr = 48 8B 0D ? ? ? ? | disp=3 insn=7`），内置候选全失配时用
 - `GTA5_DMA_diag.txt` —— 每次启动自动写出的诊断报告：偏移解析到了什么、哪些条目未定位、为什么
+- `GTA5_DMA_offsets.txt` —— **结构体字段偏移 / 脚本索引**（`PedVehiclePtr` / `VehicleModelInfo` / `ModelInfoHash` / `VehicleHealth` / `PhoneCallState` …）；文件不存在时自动生成一份**带中文注释的当前实测值**，机械式地改数值即可
+
+**一条命令看健康度**：`GTA5_DMA.exe --health` —— 11 项关键能力**功能性实测**（DMA 连接 / 世界与本地玩家 / 脚本全局 / Tunables / 玩家池 / 载具池与模型链 / 脚本线程表 / 静音来电 / BE 查询 / 偏移覆盖表 / 外部覆盖文件），每项坏在哪里、该改哪个文件都直接写出来；结果同时落盘 `GTA5_DMA_health.txt`。
+
+配套文档见仓库根目录 **《更新自救说明.txt》**（游戏更新后的自助流程，一页）。
 
 **值序列自发现**（本项目的兜底机制）：一组已知值（如佩里克六个主目标价值 400000/560000/616000/910000/1100000/1900000）在 tunable 块里连续且唯一地出现 —— 即使索引整体挪走，也能反推出正确位置。实测：把索引故意写错成 0x40001，程序体检拒绝后靠唯一性找回 0x47392。
 
