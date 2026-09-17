@@ -1472,7 +1472,7 @@ void MenuManager::RenderSettingsPageContent()
         layout2.Place(1);
         // 第32轮（安全网）：一键关停所有写入类开关，并把游戏里的对应位清零
         {
-            ConsoleTheme::BoxBegin("settings_killswitch", 2, "安全", layout2.width);
+            ConsoleTheme::BoxBegin("settings_killswitch", 3, "安全", layout2.width);
             if (ConsoleTheme::ButtonRow("全部关停（并清零游戏内存）", UiIcon::Close, false, true))
             {
                 GodMode::bPlayerGodMode.store(false);
@@ -1484,6 +1484,18 @@ void MenuManager::RenderSettingsPageContent()
                 UiToast::Show("已关停全部写入类开关，并清零无敌位", ToastKind::Success);
             }
             ConsoleTheme::TextRow("说明", "误触开关后按这里：会同时清掉游戏内存里已写入的值", false);
+
+            // 第33轮：值漂移/换战局后手动重新获取现场值（技能库《外部写入闸门》§3 的手动入口）
+            if (ConsoleTheme::ButtonRow("重新获取现场值", UiIcon::Refresh))
+            {
+                const bool a = ScriptGlobals::ReResolve();
+                const bool b = Tunables::ReResolve();
+                char m2[160];
+                std::snprintf(m2, sizeof(m2), "脚本全局 %s · Tunables %s · 自动重基线 %d 次",
+                              a ? "已重解析" : "无变化", b ? "已重解析" : "无变化",
+                              ScriptGlobals::GetRebaselineCount());
+                UiToast::Show(m2, (a || b) ? ToastKind::Success : ToastKind::Info);
+            }
             ConsoleTheme::BoxEnd();
             ImGui::Dummy(ImVec2(0.0f, 4.0f));
         }

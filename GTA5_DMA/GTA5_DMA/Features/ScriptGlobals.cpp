@@ -24,6 +24,10 @@ namespace
 	SlotState g_slots[ScriptGlobals::kSlotCount];
 	std::atomic<int> g_resolvedCount{ 0 };
 	std::atomic<int> g_blockedWrites{ 0 };
+	std::atomic<int> g_refusalStreak{ 0 };         // 连续拒绝计数 → 触发自动重新解析
+	std::atomic<int> g_rebaselineCount{ 0 };       // 自动重新基线次数（界面常显）
+	std::atomic<uint32_t> g_lastReresolveTick{ 0 };
+	std::atomic<uint32_t> g_lastRefusalLogTick{ 0 };
 	std::atomic<int> g_writeCount{ 0 };
 	std::atomic<uint32_t> g_processId{ 0 };
 	std::atomic<uintptr_t> g_processBase{ 0 };
@@ -69,6 +73,12 @@ int ScriptGlobals::Find(const char* name)
 			return static_cast<int>(i);
 	}
 	return -1;
+}
+
+bool ScriptGlobals::ReResolve()
+{
+	g_refusalStreak.store(0);
+	return ResolveInternal(true);
 }
 
 bool ScriptGlobals::Resolve()
@@ -175,10 +185,37 @@ bool ScriptGlobals::Write(uint32_t i, int32_t value, const char* why)
 	if (current != original && current != g_slots[i].lastWritten)
 	{
 		g_blockedWrites.fetch_add(1);
-		std::println("[ScriptGlobals] 拒绝写入 {}：当前值 {} 既非原值 {} 也非上次写入值 {}",
-		             ScriptGlobalTable::kEntries[i].name, current, original, g_slots[i].lastWritten);
+		const int streak = g_refusalStreak.fetch_add(1) + 1;
+		const uint32_t nowTick = GetTickCount();
+		// 拒绝日志限流：全局 30 秒最多一条（否则每帧刷屏）
+		const uint32_t lastLog = g_lastRefusalLogTick.load();
+		if (lastLog == 0 || nowTick - lastLog > 30000u)
+		{
+			g_lastRefusalLogTick.store(nowTick);
+			std::println("[ScriptGlobals] 拒绝写入 {}：当前值 {} 既非原值 {} 也非上次写入值 {}（连续第 {} 次）",
+			             ScriptGlobalTable::kEntries[i].name, current, original, g_slots[i].lastWritten, streak);
+		}
+		// 技能库《外部写入闸门》§3：连续拒绝够多 → 判定值漂移/换战局 → 自动重新解析并重新基线
+		constexpr int kStreakTrigger = 24;
+		constexpr uint32_t kMinIntervalMs = 10000;
+		if (streak >= kStreakTrigger)
+		{
+			const uint32_t lastRr = g_lastReresolveTick.load();
+			if (lastRr == 0 || nowTick - lastRr >= kMinIntervalMs)
+			{
+				g_lastReresolveTick.store(nowTick);
+				g_refusalStreak.store(0);
+				g_rebaselineCount.fetch_add(1);
+				std::println("[ScriptGlobals] 连续拒绝 {} 次 → 判定值漂移/换战局，自动重新解析并重新基线（第 {} 次）",
+				             kStreakTrigger, g_rebaselineCount.load());
+				g_slots[i].original = current;      // 用现场值当新基线
+				g_slots[i].lastWritten = current;
+				ResolveInternal(true);
+			}
+		}
 		return false;
 	}
+	g_refusalStreak.store(0);   // 写入成功 → 连续拒绝清零
 
 	if (!DMA::Memory().Write(address, &value, sizeof(value)))
 		return false;
@@ -254,6 +291,7 @@ uintptr_t ScriptGlobals::GetAddress(uint32_t i) { return i < kSlotCount ? g_slot
 int32_t ScriptGlobals::GetOriginal(uint32_t i) { return i < kSlotCount ? g_slots[i].original : 0; }
 int ScriptGlobals::GetResolvedCount() { return g_resolvedCount.load(); }
 int ScriptGlobals::GetBlockedWriteCount() { return g_blockedWrites.load(); }
+int ScriptGlobals::GetRebaselineCount() { return g_rebaselineCount.load(); }
 int ScriptGlobals::GetWriteCount() { return g_writeCount.load(); }
 const char* ScriptGlobals::GetEntryPurpose(uint32_t i)
 {

@@ -581,6 +581,19 @@ bool Tunables::Write(uint32_t i, int32_t value, const char* why)
 	const int32_t current = ReadBits(address);
 	if (current == value)
 	{
+		// 第33轮（用户要求）：本会话**没写过**却已经是目标值（如防踢的 INT_MAX）→
+		// 这多半是上一次运行/别的工具留下的，或者索引已随游戏更新漂移 → 不能直接认账，
+		// 先强制「重新获取最新」：重解析 + 用现场值重建基线，再复核一次。
+		if (!g_slots[i].haveWritten)
+		{
+			std::println("[Tunables] {} 读到已是目标值 {} 且本会话未写过 → 重新获取最新（重解析+重建基线）",
+			             TunableTable::kEntries[i].name, value);
+			Tunables::ReResolve();
+			bool ok2 = false;
+			const int32_t after = Tunables::ReadLive(i, &ok2);
+			std::println("[Tunables] 重新获取后 {} = {}（读取{})，按新基线继续", TunableTable::kEntries[i].name,
+			             after, ok2 ? "成功" : "失败");
+		}
 		g_slots[i].haveWritten = true;
 		g_slots[i].lastWrittenBits = value;
 		return true;

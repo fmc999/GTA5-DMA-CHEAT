@@ -23,7 +23,9 @@ public:
 	static constexpr uint32_t kTriggerHoldMs = 1500;    // 脉冲动作保持时长
 
 	// 生命周期
-	static bool Resolve();                              // 可重复调用；已全部解析则直接返回
+	static bool Resolve();
+	static bool ReResolve();      // 强制重新解析（值漂移/换战局自愈；界面按钮也用它）
+	static int  GetRebaselineCount();   // 自动重新基线次数（界面常显）                              // 可重复调用；已全部解析则直接返回
 	static void Reset();
 	static bool RestoreAll();
 	static bool PrepareForClose();

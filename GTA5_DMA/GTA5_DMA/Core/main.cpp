@@ -11,6 +11,7 @@
 #include "InputManager.h"
 #include "DMA.h"
 #include "Tunables.h"
+#include "ScriptGlobals.h"
 #include "ScriptThreads.h"
 #include "EconomyFeatures.h"
 #include "Diagnostics.h"
@@ -59,6 +60,61 @@ int main(int argc, char** argv)
 	}
 
 	// 游戏时钟实测（--clock-probe）
+	// 写入闸门演练（--gate-drill）：制造真漂移（改成别的值），断言工具自愈后仍能写入
+	if (argc > 1 && std::string(argv[1]) == "--gate-drill")
+	{
+		if (!DMA::Initialize())
+		{
+			std::printf("DMA 初始化失败\n");
+			return 1;
+		}
+		ScriptGlobals::Resolve();
+		const int idx = ScriptGlobals::Find("GTA_PLUS_ENABLED");
+		if (idx < 0 || !ScriptGlobals::IsResolved(static_cast<uint32_t>(idx)))
+		{
+			std::printf("[drill] 全局未解析（不在线上战局？）→ 跳过\n");
+			DMA::Close();
+			return 2;
+		}
+		const uintptr_t addr = ScriptGlobals::GetAddress(static_cast<uint32_t>(idx));
+		const int32_t baseline = ScriptGlobals::ReadLive(static_cast<uint32_t>(idx), nullptr);
+		const int32_t target   = baseline;                 // 我们要维持的值
+		const int32_t drifted  = (baseline == 0) ? 1 : 0;  // 模拟目标把它改成别的值
+		std::printf("[drill] 槽位=%d 地址=0x%llX 基线=%d 漂移值=%d\n", idx,
+		            static_cast<unsigned long long>(addr), baseline, drifted);
+
+		// ① 绕过闸门写入漂移值（模拟目标自己重置/别的工具改了它）
+		{
+			int32_t d = drifted;
+		    DMA::Memory().Write(addr, &d, sizeof(d));
+		}
+		const int32_t afterDrift = ScriptGlobals::ReadLive(static_cast<uint32_t>(idx), nullptr);
+
+		// ② 走正常写入路径：前若干次会被闸门拒绝（值既非原值也非上次写入），
+		//    连续 24 次后应触发「自动重新解析 + 重新基线」，随后写入成功
+		bool wrote = false;
+		int attempts = 0;
+		for (; attempts < 40 && !wrote; ++attempts)
+		    wrote = ScriptGlobals::Write(static_cast<uint32_t>(idx), target, "drill");
+		const int32_t afterWrite = ScriptGlobals::ReadLive(static_cast<uint32_t>(idx), nullptr);
+
+		// ③ 还原到基线
+		{
+			int32_t back = baseline;
+		    DMA::Memory().Write(addr, &back, sizeof(back));
+		}
+		const int32_t restored = ScriptGlobals::ReadLive(static_cast<uint32_t>(idx), nullptr);
+
+		const bool pass = wrote && afterWrite == target && restored == baseline;
+		std::printf("[drill] 模拟漂移为 %d（读到 %d）→ 正常写入尝试 %d 次 %s，读到 %d → 还原 %d → %s\n",
+		            drifted, afterDrift, attempts, wrote ? "成功" : "仍失败", afterWrite, restored,
+		            pass ? "PASS" : "FAIL");
+		std::printf("[drill] 自动重基线次数=%d 拒绝写入计数=%d\n",
+		            ScriptGlobals::GetRebaselineCount(), ScriptGlobals::GetBlockedWriteCount());
+		DMA::Close();
+		return pass ? 0 : 2;
+	}
+
 	// 一键关停写入类开关（--all-off / --god-off）：把无敌相关的写入位清零并读回
 	if (argc > 1 && (std::string(argv[1]) == "--all-off" || std::string(argv[1]) == "--god-off"))
 	{
