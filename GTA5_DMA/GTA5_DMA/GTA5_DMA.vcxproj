@@ -198,6 +198,7 @@
     <ClCompile Include="Features\WeaponInspector.cpp" />
     <ClCompile Include="Features\PlayerList.cpp" />
     <ClCompile Include="Features\HeistSetup.cpp" />
+    <ClCompile Include="Features\BanCheck.cpp" />
     <ClCompile Include="Features\NetTimeScan.cpp" />
     <ClCompile Include="Features\OffRadar.cpp" />
     <ClCompile Include="Features\TimeControl.cpp" />
@@ -261,6 +262,7 @@
     <ClInclude Include="Features\WeaponInspector.h" />
     <ClInclude Include="Features\PlayerList.h" />
     <ClInclude Include="Features\HeistSetup.h" />
+    <ClInclude Include="Features\BanCheck.h" />
     <ClInclude Include="Features\NetTimeScan.h" />
     <ClInclude Include="Features\OffRadar.h" />
     <ClInclude Include="Features\TimeControl.h" />

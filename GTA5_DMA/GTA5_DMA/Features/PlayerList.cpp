@@ -1,6 +1,7 @@
 #include "pch.h"
 
 #include "PlayerList.h"
+#include "BanCheck.h"
 #include "VehicleNames.h"
 #include "VehicleNameOverrides.h"
 
@@ -176,6 +177,17 @@ void PlayerList::OnDMAFrame()
     const uint8_t bringTarget = g_PendingBring.exchange(0xFF);
     if (bringTarget != 0xFF)
         BringPlayerToMe(bringTarget);
+
+    // 第28轮：把战局里每个玩家的 RID 交给 BE 封禁自动查询（去重 + 串行排队 + 24h 缓存，
+    // 与当前显示哪个页面无关，因此放在 DMA 线程的刷新里）
+    {
+        std::lock_guard<std::mutex> lock(g_PlayerMutex);
+        for (const SessionPlayer& p : g_Players)
+        {
+            if (p.RockstarId > 0)
+                BanCheck::AutoQuery(static_cast<long long>(p.RockstarId));
+        }
+    }
 }
 
 void PlayerList::RefreshPlayers()

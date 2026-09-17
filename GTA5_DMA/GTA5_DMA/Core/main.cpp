@@ -4,6 +4,7 @@
 #include <thread>
 
 #include "MyImGui.h"
+#include "BanCheck.h"
 #include "AppRuntime.h"
 #include "InputManager.h"
 #include "DMA.h"
@@ -56,6 +57,42 @@ int main(int argc, char** argv)
 	}
 
 	// 游戏时钟实测（--clock-probe）
+	// BE 封禁查询自检（--ban-check <RID>）：不需要游戏/DMA，纯 BE 服务端库查询
+	if (argc > 2 && std::string(argv[1]) == "--ban-check")
+	{
+		const long long rid = std::atoll(argv[2]);
+		std::printf("[BanCheck] 查询 RID %lld ...\n", rid);
+		if (!BanCheck::Available())
+		{
+			std::printf("[BanCheck] 不可用: %s\n", BanCheck::LastError().c_str());
+			return 1;
+		}
+		if (!BanCheck::Start(rid))
+		{
+			std::printf("[BanCheck] 启动失败: %s\n", BanCheck::LastError().c_str());
+			return 1;
+		}
+		for (int i = 0; i < 200; ++i)
+		{
+			BanCheck::Tick();
+			if (BanCheck::Current() != BanCheck::State::Checking)
+				break;
+			Sleep(100);
+		}
+		switch (BanCheck::Current())
+		{
+		case BanCheck::State::Banned:
+			std::printf("[BanCheck] RID %lld -> 已封禁 | 理由: %s\n", rid, BanCheck::Reason().c_str());
+			return 0;
+		case BanCheck::State::Clean:
+			std::printf("[BanCheck] RID %lld -> 未封禁（无 BE 封禁记录）\n", rid);
+			return 0;
+		default:
+			std::printf("[BanCheck] RID %lld -> 查询未完成/失败\n", rid);
+			return 2;
+		}
+	}
+
 	if (argc > 1 && std::string(argv[1]) == "--clock-probe")
 	{
 		AppRuntime::Reset();
@@ -539,6 +576,9 @@ int main(int argc, char** argv)
 		// Handle exit keys
 		if ((GetAsyncKeyState(VK_END) & 1) || g_inputManager.IsKeyPressed(VK_END))
 			AppRuntime::RequestStop();
+
+		// BE 封禁查询：驱动 BE 网络循环（无查询时是空操作）
+		BanCheck::Tick();
 
 		// Render ImGui frame
 		MyImGui::OnFrame();

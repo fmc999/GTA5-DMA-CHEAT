@@ -15,6 +15,7 @@
 #include "NoCollision.h"
 #include "NoWanted.h"
 #include "PlayerList.h"
+#include "BanCheck.h"
 #include "VehicleList.h"
 #include "VehicleRepair.h"
 #include "PlayerSpeed.h"
@@ -570,6 +571,16 @@ void MenuManager::RenderSessionPageContent()
         players = std::move(filtered);
     }
 
+    // 第28轮：数字列右对齐，表格更整齐
+    auto TextRightAligned = [](const char* text)
+    {
+        const float avail = ImGui::GetContentRegionAvail().x;
+        const float w = ImGui::CalcTextSize(text).x;
+        if (w < avail)
+            ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (avail - w));
+        ImGui::TextUnformatted(text);
+    };
+
     ConsoleTheme::BoxBegin("session_filter", 1, "筛选", 0.0f);
     ImGui::SetNextItemWidth(240.0f);
     ImGui::InputTextWithHint("##player_search", "搜索玩家…", search, sizeof(search));
@@ -593,7 +604,7 @@ void MenuManager::RenderSessionPageContent()
 
     if (ConsoleTheme::BoxBeginPixels("##session_players_box", tableHeight + 20.0f))
     {
-        if (ImGui::BeginTable("##session_players", 8, flags, ImVec2(0.0f, tableHeight)))
+        if (ImGui::BeginTable("##session_players", 9, flags, ImVec2(0.0f, tableHeight)))
         {
             ImGui::TableSetupScrollFreeze(0, 1);
             ImGui::TableSetupColumn("序号", ImGuiTableColumnFlags_WidthFixed, 44.0f);
@@ -603,6 +614,7 @@ void MenuManager::RenderSessionPageContent()
             ImGui::TableSetupColumn("护甲", ImGuiTableColumnFlags_WidthFixed, 60.0f);
             ImGui::TableSetupColumn("距离", ImGuiTableColumnFlags_WidthFixed, 70.0f);
             ImGui::TableSetupColumn("载具", ImGuiTableColumnFlags_WidthFixed, 150.0f);
+            ImGui::TableSetupColumn("BE", ImGuiTableColumnFlags_WidthFixed, 52.0f);
             ImGui::TableSetupColumn("状态", ImGuiTableColumnFlags_WidthFixed, 96.0f);
             ImGui::TableHeadersRow();
 
@@ -635,13 +647,25 @@ void MenuManager::RenderSessionPageContent()
                     ImGui::TextDisabled("-");
 
                 ImGui::TableNextColumn();
-                ImGui::Text("%.0f", player.Health);
+                {
+                    char nb[24];
+                    std::snprintf(nb, sizeof(nb), "%.0f", player.Health);
+                    TextRightAligned(nb);
+                }
 
                 ImGui::TableNextColumn();
-                ImGui::Text("%.0f", player.Armor);
+                {
+                    char nb[24];
+                    std::snprintf(nb, sizeof(nb), "%.0f", player.Armor);
+                    TextRightAligned(nb);
+                }
 
                 ImGui::TableNextColumn();
-                ImGui::Text("%.0fm", player.Distance);
+                {
+                    char nb[24];
+                    std::snprintf(nb, sizeof(nb), "%.0fm", player.Distance);
+                    TextRightAligned(nb);
+                }
 
                 ImGui::TableNextColumn();
                 // 第27轮：所在载具（只读）。模型哈希取自 CVehicle+0x20 → CBaseModelInfo+0x18，
@@ -661,6 +685,25 @@ void MenuManager::RenderSessionPageContent()
                 else
                 {
                     ImGui::TextDisabled("-");
+                }
+
+                ImGui::TableNextColumn();
+                // 第28轮：BE 封禁状态（只读，取自 BanCheck 缓存）
+                {
+                    const long long ridLL = static_cast<long long>(player.RockstarId);
+                    const BanCheck::Cached* be = (player.RockstarId > 0) ? BanCheck::FindCached(ridLL) : nullptr;
+                    const bool beRunning = BanCheck::Current() == BanCheck::State::Checking &&
+                        BanCheck::CurrentRid() == ridLL;
+                    if (beRunning)
+                        ImGui::TextDisabled("查…");
+                    else if (be && be->state == BanCheck::State::Banned)
+                        ImGui::TextColored(ConsoleTheme::Danger(), "封");
+                    else if (be && be->state == BanCheck::State::Clean)
+                        ImGui::TextColored(ConsoleTheme::Accent(), "正常");
+                    else if (be)
+                        ImGui::TextDisabled("-");
+                    else
+                        ImGui::TextDisabled("排队");
                 }
 
                 ImGui::TableNextColumn();
@@ -715,16 +758,41 @@ void MenuManager::RenderSessionPageContent()
         detail.Advance(0, TitledBoxHeight(3));
 
         detail.Place(0);
-        ConsoleTheme::BoxBegin("player_combat", 2, "战斗数据", detail.width);
+        ConsoleTheme::BoxBegin("player_combat", 4, "战斗数据", detail.width);
         ConsoleTheme::TextRow("通缉等级", std::to_string(selected.WantedLevel).c_str(), true);
         ConsoleTheme::TextRow("载具状态", selected.InVehicle ? "载具中" : "步行", true, false);
+
+        // 第28轮：BE 封禁查询（只读；用 BE 服务端库向 BE 主服务器核对 RID）
+        {
+            const long long ridLL = static_cast<long long>(selected.RockstarId);
+            const BanCheck::Cached* be = BanCheck::FindCached(ridLL);
+            const bool running = BanCheck::Current() == BanCheck::State::Checking &&
+                BanCheck::CurrentRid() == ridLL;
+            char beText[192];
+            if (running)
+                std::snprintf(beText, sizeof(beText), "查询中…");
+            else if (be && be->state == BanCheck::State::Banned)
+                std::snprintf(beText, sizeof(beText), "已封禁 · %s", be->reason.c_str());
+            else if (be && be->state == BanCheck::State::Clean)
+                std::snprintf(beText, sizeof(beText), "未封禁");
+            else if (!BanCheck::Available())
+                std::snprintf(beText, sizeof(beText), "不可用（缺 BEServer_x64.dll）");
+            else
+                std::snprintf(beText, sizeof(beText), "未查询");
+            ConsoleTheme::TextRow("BE 封禁", beText, true);
+
+            char queueText[96];
+            std::snprintf(queueText, sizeof(queueText), "已排队 %d · 已缓存 %d",
+                          BanCheck::PendingCount(), BanCheck::CachedCount());
+            ConsoleTheme::TextRow("自动查询", queueText, false);
+        }
         ConsoleTheme::BoxEnd();
-        detail.Advance(0, TitledBoxHeight(2));
+        detail.Advance(0, TitledBoxHeight(4));
     }
 
     {
         detail.Place(1);
-        ConsoleTheme::BoxBegin("player_actions", 3, "对目标执行", detail.width);
+        ConsoleTheme::BoxBegin("player_actions", 4, "对目标执行", detail.width);
         if (ConsoleTheme::ButtonRow("传送到此玩家", UiIcon::Pin, true))
         {
             PlayerList::RequestTeleportTo(selected.PlayerIndex);
@@ -741,8 +809,26 @@ void MenuManager::RenderSessionPageContent()
             PlayerList::RequestKill(selected.PlayerIndex);
             UiToast::Show(std::string("已请求击杀 ") + selected.Name, ToastKind::Danger);
         }
+        if (ConsoleTheme::ButtonRow("查 BE 封禁", UiIcon::Shield))
+        {
+            const long long ridLL = static_cast<long long>(selected.RockstarId);
+            if (ridLL <= 0)
+            {
+                UiToast::Show("该玩家没有有效 RID，无法查询", ToastKind::Info);
+            }
+            else if (BanCheck::Start(ridLL))
+            {
+                char msg[96];
+                std::snprintf(msg, sizeof(msg), "正在向 BE 查询 RID %lld …", ridLL);
+                UiToast::Show(msg, ToastKind::Info);
+            }
+            else
+            {
+                UiToast::Show(std::string("查询启动失败：") + BanCheck::LastError(), ToastKind::Danger);
+            }
+        }
         ConsoleTheme::BoxEnd();
-        detail.Advance(1, TitledBoxHeight(3));
+        detail.Advance(1, TitledBoxHeight(4));
 
         detail.Place(1);
         ConsoleTheme::BoxBegin("player_bring", 2, "最近一次拉人", detail.width);
