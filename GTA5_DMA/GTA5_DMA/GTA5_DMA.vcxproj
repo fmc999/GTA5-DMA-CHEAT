@@ -181,6 +181,7 @@
     <ClCompile Include="Core\PatternScanner.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
+    <ClCompile Include="Core\DynamicOffsets.cpp" />
     <ClCompile Include="Core\OffsetResolver.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
@@ -211,6 +212,7 @@
     <ClCompile Include="Features\Tunables.cpp" />
     <ClCompile Include="Features\ProgressFeatures.cpp" />
     <ClCompile Include="Core\Diagnostics.cpp" />
+    <ClCompile Include="Core\HealthReport.cpp" />
     <ClCompile Include="Core\RuntimeTables.cpp" />
     <ClCompile Include="Features\ScriptGlobals.cpp" />
     <ClCompile Include="Features\ScriptThreads.cpp" />
@@ -246,6 +248,7 @@
     <ClInclude Include="Core\Vector.h" />
     <ClInclude Include="Core\PatternScanner.h" />
     <ClInclude Include="Core\OffsetResolver.h" />
+    <ClInclude Include="Core\DynamicOffsets.h" />
     <ClInclude Include="Core\Reclass.h" />
     <ClInclude Include="Features\Features.h" />
     <ClInclude Include="Features\Locations.h" />
@@ -278,6 +281,7 @@
     <ClInclude Include="Features\ProgressFeatures.h" />
     <ClInclude Include="Features\TunableTable.h" />
     <ClInclude Include="Core\Diagnostics.h" />
+    <ClInclude Include="Core\HealthReport.h" />
     <ClInclude Include="Core\RuntimeTables.h" />
     <ClInclude Include="Features\ScriptGlobals.h" />
     <ClInclude Include="Features\ScriptGlobalsTable.h" />

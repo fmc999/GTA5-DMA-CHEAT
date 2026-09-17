@@ -12,6 +12,7 @@
 #include "DMA.h"
 #include "Tunables.h"
 #include "ScriptGlobals.h"
+#include "HealthReport.h"
 #include "ScriptThreads.h"
 #include "EconomyFeatures.h"
 #include "Diagnostics.h"
@@ -113,6 +114,26 @@ int main(int argc, char** argv)
 		            ScriptGlobals::GetRebaselineCount(), ScriptGlobals::GetBlockedWriteCount());
 		DMA::Close();
 		return pass ? 0 : 2;
+	}
+
+	// 长寿体检（--health）：功能性实测每项关键能力，坏的项直接给修法
+	if (argc > 1 && std::string(argv[1]) == "--health")
+	{
+		if (!DMA::Initialize())
+		{
+			std::printf("DMA 初始化失败（游戏没跑？设备被占？）\n");
+			return 1;
+		}
+		DMA::UpdateEssentials();
+		VehicleList::RefreshVehicles();
+		const auto items = HealthReport::Run();
+		HealthReport::Print(items);
+		HealthReport::AppendToDiagnostics();
+		int bad = 0;
+		for (const auto& it : items)
+		    if (!it.ok && !it.warn) ++bad;
+		DMA::Close();
+		return bad == 0 ? 0 : 2;
 	}
 
 	// 一键关停写入类开关（--all-off / --god-off）：把无敌相关的写入位清零并读回

@@ -5,6 +5,7 @@
 #include "VehicleNameOverrides.h"
 
 #include "DMA.h"
+#include "DynamicOffsets.h"
 #include "Offsets.h"
 #include "Reclass.h"
 
@@ -91,8 +92,8 @@ void VehicleList::RefreshVehicles()
         //   （实测 24/25 辆池内载具能在 921 条官方全表中命中）
         {
             uintptr_t modelInfo = 0;
-            if (DMA::Memory().Read(vehAddress + 0x20, &modelInfo, sizeof(modelInfo)) && modelInfo) 
-                DMA::Memory().Read(modelInfo + 0x18, &v.ModelHash, sizeof(v.ModelHash));
+            if (DMA::Memory().Read(vehAddress + DynamicOffsets::GetPtr("VehicleModelInfo", 0x20), &modelInfo, sizeof(modelInfo)) && modelInfo) 
+                DMA::Memory().Read(modelInfo + DynamicOffsets::GetPtr("ModelInfoHash", 0x18), &v.ModelHash, sizeof(v.ModelHash));
         }
         DMA::Memory().Read(vehAddress + offsetof(CVehicle, Health), &v.Health, sizeof(v.Health));
         uintptr_t nav = 0;

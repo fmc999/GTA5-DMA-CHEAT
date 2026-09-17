@@ -11,6 +11,7 @@
 #include "PhoneSilencer.h"
 
 #include "DMA.h"
+#include "DynamicOffsets.h"
 
 #include <atomic>
 #include <chrono>
@@ -21,10 +22,11 @@ namespace PhoneSilencer
     namespace
     {
         // Yim 用的四个全局索引
-        constexpr uint32_t kIdxCallState = 23040;   // 电话状态（写 6 = 静音）
-        constexpr uint32_t kIdxInProgress = 23046;  // 通话进行中
-        constexpr uint32_t kIdxIncoming = 23050;    // 有来电
-        constexpr uint32_t kIdxCaller = 8818;       // 来电角色 ID（只读）
+        // 第33轮：改成外部文件驱动（GTA5_DMA_offsets.txt），游戏更新后改文本即可，不用重编译
+        inline uint32_t IdxCallState() { return static_cast<uint32_t>(DynamicOffsets::Get("PhoneCallState", 23040)); }
+        inline uint32_t IdxInProgress() { return static_cast<uint32_t>(DynamicOffsets::Get("PhoneCallInProgress", 23046)); }
+        inline uint32_t IdxIncoming() { return static_cast<uint32_t>(DynamicOffsets::Get("PhoneCallIncoming", 23050)); }
+        inline uint32_t IdxCaller() { return static_cast<uint32_t>(DynamicOffsets::Get("PhoneCaller", 8818)); }
 
         constexpr int32_t kSilenced = 6;            // 与 Yim 一致
         constexpr int kThrottleMs = 250;            // 检查节流
@@ -66,10 +68,10 @@ namespace PhoneSilencer
     Snapshot Read()
     {
         Snapshot s{};
-        s.addrState = DMA::GetGlobalAddress(kIdxCallState);
-        s.addrProgress = DMA::GetGlobalAddress(kIdxInProgress);
-        s.addrIncoming = DMA::GetGlobalAddress(kIdxIncoming);
-        s.addrCaller = DMA::GetGlobalAddress(kIdxCaller);
+        s.addrState = DMA::GetGlobalAddress(IdxCallState());
+        s.addrProgress = DMA::GetGlobalAddress(IdxInProgress());
+        s.addrIncoming = DMA::GetGlobalAddress(IdxIncoming());
+        s.addrCaller = DMA::GetGlobalAddress(IdxCaller());
         if (!s.addrState || !s.addrProgress || !s.addrIncoming || !s.addrCaller)
             return s;
 

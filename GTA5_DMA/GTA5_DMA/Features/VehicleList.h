@@ -43,6 +43,7 @@ class VehicleList
 public:
     // DMA 线程：每帧刷新（内部按间隔节流）
     static void OnDMAFrame();
+    static void RefreshVehicles();   // 体检/CLI 需要显式刷新池
 
     // UI 线程：快照
     static std::vector<SessionVehicle> GetSnapshot();
@@ -63,7 +64,6 @@ public:
     static TpToVehicleReport GetLastTeleport();
 
 private:
-    static void RefreshVehicles();
     static void TeleportVehicleToPlayer(uintptr_t vehicleAddress);   // 载具 → 我（仅刷车使用）
     static void TeleportPlayerToVehicle(uintptr_t vehicleAddress);   // 我 → 载具（载具页按钮）
     static bool IsLocalPlayerInVehicle();
