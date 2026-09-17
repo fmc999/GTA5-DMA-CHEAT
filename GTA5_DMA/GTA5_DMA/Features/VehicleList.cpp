@@ -85,7 +85,14 @@ void VehicleList::RefreshVehicles()
         v.IsValid = true;
 
         // 模型哈希 + 血量 + 导航（定点小读，DMA 上大块读易失败）
-        DMA::Memory().Read(vehAddress + offsetof(CVehicle, EntityModelHash), &v.ModelHash, sizeof(v.ModelHash));
+        // 第27轮修正：载具 +0x18 不是模型哈希（实测是标志字）。正确链：
+        //   CVehicle(fwEntity)+0x20 = m_ModelInfo  →  CBaseModelInfo+0x18 = 模型哈希
+        //   （实测 24/25 辆池内载具能在 921 条官方全表中命中）
+        {
+            uintptr_t modelInfo = 0;
+            if (DMA::Memory().Read(vehAddress + 0x20, &modelInfo, sizeof(modelInfo)) && modelInfo) 
+                DMA::Memory().Read(modelInfo + 0x18, &v.ModelHash, sizeof(v.ModelHash));
+        }
         DMA::Memory().Read(vehAddress + offsetof(CVehicle, Health), &v.Health, sizeof(v.Health));
         uintptr_t nav = 0;
         if (DMA::Memory().Read(vehAddress + offsetof(CVehicle, pCNavigation), &nav, sizeof(nav)) && nav)

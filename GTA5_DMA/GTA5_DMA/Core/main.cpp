@@ -15,6 +15,7 @@
 #include "OffRadar.h"
 #include "TimeControl.h"
 #include <map>
+#include <unordered_map>
 #include "PlayerList.h"
 #include "VehicleList.h"
 #include "NetTimeScan.h"
@@ -112,40 +113,71 @@ int main(int argc, char** argv)
 			vehHashes.push_back(h);
 		}
 		std::println("");
-		// ---- CModelInfo 探针：从载具里找模型信息指针 → 读模型名字符串（权威证据）----
+		// ---- 用全量表统计定位「模型哈希字段」----
+		// 判据：模型哈希字段对**所有**车都应能在 921 条全量表里命中；
+		//       其他 32 位字段（标志位/坐标/句柄）命中率极低。
 		{
 			std::println("");
-			std::println("=== CModelInfo 探针（第一辆池内载具 0x{:X}）===", vehAddrs[0]);
-			uint8_t vbuf[0x90] = {};
-			DMA::Memory().Read(vehAddrs[0], vbuf, sizeof(vbuf));
-			for (int off = 0; off + 8 <= (int)sizeof(vbuf); off += 8)
+			std::println("=== 模型哈希字段定位（全量表 {} 条）===", kVehicleNameCount);
+
+			const int kMaxVeh = 25;
+			const int kVehScan = 0x100;
+			const int kMiScan = 0x100;
+
+			std::vector<int> vehHits(kVehScan / 4, 0);
+			std::vector<int> miHits(kMiScan / 4, 0);
+			std::unordered_map<uintptr_t, int> miSeen;
+			int sampled = 0;
+			int miSame = 0;
+
+			for (size_t i = 0; i < vehAddrs.size() && sampled < kMaxVeh; ++i)
 			{
-				uintptr_t p = 0;
-				std::memcpy(&p, vbuf + off, 8);
-				if (p < 0x10000) continue;
-				uint8_t miBuf[0x100] = {};
-				if (!DMA::Memory().Read(p, miBuf, sizeof(miBuf))) continue;
-				for (int j = 0; j + 8 <= (int)sizeof(miBuf); j += 8)
+				std::vector<uint8_t> vb(kVehScan);
+				if (!DMA::Memory().Read(vehAddrs[i], vb.data(), vb.size()))
+					continue;
+
+				// ① 载具自身结构里直接找
+				for (int off = 0; off + 4 <= kVehScan; off += 4)
 				{
-					uintptr_t sp = 0;
-					std::memcpy(&sp, miBuf + j, 8);
-					if (sp < 0x10000) continue;
-					char str[32] = {};
-					if (!DMA::Memory().Read(sp, str, sizeof(str) - 1)) continue;
-					bool ok = true;
-					int len = 0;
-					for (int k = 0; k < 24 && str[k]; ++k)
+					uint32_t v = 0;
+					std::memcpy(&v, vb.data() + off, 4);
+					if (LookupVehicleName(v))
+						vehHits[off / 4]++;
+				}
+
+				// ② 顺着 m_ModelInfo(+0x20) 进去找（YimMenuV2: fwEntity::m_ModelInfo @ +0x20）
+				uintptr_t mi = 0;
+				std::memcpy(&mi, vb.data() + 0x20, sizeof(mi));
+				if (mi >= 0x10000)
+				{
+					std::vector<uint8_t> mb(kMiScan);
+					if (DMA::Memory().Read(mi, mb.data(), mb.size()))
 					{
-						const char c = str[k];
-						const bool good = (c >= 97 && c <= 122) || (c >= 65 && c <= 90) ||
-						                  (c >= 48 && c <= 57) || c == 95 || c == 45;
-						if (!good) { ok = false; break; }
-						++len;
+						const int seen = miSeen[mi]++;
+						if (seen > 0)
+							++miSame;   // 同一个模型信息被多辆车共用（同型号）
+						for (int off = 0; off + 4 <= kMiScan; off += 4)
+						{
+							uint32_t v = 0;
+							std::memcpy(&v, mb.data() + off, 4);
+							if (LookupVehicleName(v))
+								miHits[off / 4]++;
+						}
+						++sampled;
 					}
-					if (!ok || len < 2 || len > 22) continue;
-					std::println("    ★ 载具+0x{:02X} → 结构 0x{:X} 的 +0x{:02X} → 字符串 [{}]", off, p, j, str);
 				}
 			}
+
+			std::println("  采样 {} 辆车；其中 {} 辆的 m_ModelInfo 指针与别的车相同（同型号共用 → 指针链正确）", sampled, miSame);
+			std::println("");
+			std::println("  载具结构自身命中率（前几名）：");
+			for (int k = 0; k < (int)vehHits.size(); ++k)
+				if (vehHits[k] > 0)
+					std::println("    +0x{:02X}：{}/{}", k * 4, vehHits[k], sampled);
+			std::println("  模型信息结构命中率（前几名）：");
+			for (int k = 0; k < (int)miHits.size(); ++k)
+				if (miHits[k] > 0)
+					std::println("    +0x{:02X}：{}/{}", k * 4, miHits[k], sampled);
 		}
 		// 数据驱动定位模型哈希字段：统计每个偏移在全部车上的「不同取值数」
 		{

@@ -77,9 +77,12 @@ namespace
         if (ped.pCVehicle)
         {
             const uintptr_t veh = reinterpret_cast<uintptr_t>(ped.pCVehicle);
+            // 第27轮修正：模型哈希在 m_ModelInfo(+0x20) 指向结构的 +0x18（实测验证）
             uint32_t model = 0;
-            if (DMA::Memory().Read(veh + offsetof(CVehicle, EntityModelHash), &model, sizeof(model)))
-                out.VehicleModel = model;
+            uintptr_t modelInfo = 0;
+            if (DMA::Memory().Read(veh + 0x20, &modelInfo, sizeof(modelInfo)) && modelInfo)
+                DMA::Memory().Read(modelInfo + 0x18, &model, sizeof(model));
+            out.VehicleModel = model;
             DMA::Memory().Read(veh + offsetof(CVehicle, Health), &out.VehicleHealth, sizeof(out.VehicleHealth));
             DMA::Memory().Read(veh + offsetof(CVehicle, EngineHealth), &out.VehicleEngineHealth, sizeof(out.VehicleEngineHealth));
             out.VehicleName = LookupVehicleName(out.VehicleModel);

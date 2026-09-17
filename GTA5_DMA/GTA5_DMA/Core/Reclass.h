@@ -183,6 +183,17 @@ public:
 	uint32_t m_ItemCount;          //0x0064
 };
 
+// ！！Enhanced 版实测修正（第27轮）！！
+//   EntityModelHash @ +0x18 **不成立**（40 辆池内载具该处全是标志字 0x01020000/0x01028020）
+//   正确链：CVehicle(fwEntity) + 0x20 = m_ModelInfo（CBaseModelInfo*）
+//           CBaseModelInfo + 0x18 = 模型哈希（实测 24/25 辆能在 921 条官方全表中命中）
+//   见 Features/VehicleNames.h 与 --vehicle-hunt 探针输出
+// ！！Enhanced 版实测修正（第27轮）！！
+//   EntityModelHash @ +0x18 **不成立**：40 辆池内载具该处全是标志字（0x01020000 / 0x01028020）
+//   正确链（实测 24/25 辆能在 921 条官方全表中命中）：
+//       CVehicle(fwEntity) + 0x20 = m_ModelInfo（CBaseModelInfo*）
+//       CBaseModelInfo     + 0x18 = 模型哈希
+//   定位方法与本表见 Features/VehicleNames.h、--vehicle-hunt 探针
 class CVehicle
 {
 public:

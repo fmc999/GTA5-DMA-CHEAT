@@ -593,7 +593,7 @@ void MenuManager::RenderSessionPageContent()
 
     if (ConsoleTheme::BoxBeginPixels("##session_players_box", tableHeight + 20.0f))
     {
-        if (ImGui::BeginTable("##session_players", 7, flags, ImVec2(0.0f, tableHeight)))
+        if (ImGui::BeginTable("##session_players", 8, flags, ImVec2(0.0f, tableHeight)))
         {
             ImGui::TableSetupScrollFreeze(0, 1);
             ImGui::TableSetupColumn("序号", ImGuiTableColumnFlags_WidthFixed, 44.0f);
@@ -602,6 +602,7 @@ void MenuManager::RenderSessionPageContent()
             ImGui::TableSetupColumn("血量", ImGuiTableColumnFlags_WidthFixed, 60.0f);
             ImGui::TableSetupColumn("护甲", ImGuiTableColumnFlags_WidthFixed, 60.0f);
             ImGui::TableSetupColumn("距离", ImGuiTableColumnFlags_WidthFixed, 70.0f);
+            ImGui::TableSetupColumn("载具", ImGuiTableColumnFlags_WidthFixed, 150.0f);
             ImGui::TableSetupColumn("状态", ImGuiTableColumnFlags_WidthFixed, 96.0f);
             ImGui::TableHeadersRow();
 
@@ -641,6 +642,26 @@ void MenuManager::RenderSessionPageContent()
 
                 ImGui::TableNextColumn();
                 ImGui::Text("%.0fm", player.Distance);
+
+                ImGui::TableNextColumn();
+                // 第27轮：所在载具（只读）。模型哈希取自 CVehicle+0x20 → CBaseModelInfo+0x18，
+                // 已用 921 条官方全表实测验证（24/25 辆命中），中文名为官方译名。
+                if (player.VehicleName)
+                {
+                    ImGui::TextColored(ConsoleTheme::Accent(), "%s", player.VehicleName->cn);
+                    if (ImGui::IsItemHovered())
+                        ImGui::SetTooltip("%s（%s）｜模型名 %s｜哈希 0x%08X",
+                                         player.VehicleName->cn, player.VehicleName->kind,
+                                         player.VehicleName->model, player.VehicleModel);
+                }
+                else if (player.VehicleModel != 0)
+                {
+                    ImGui::TextDisabled("0x%08X", player.VehicleModel);
+                }
+                else
+                {
+                    ImGui::TextDisabled("-");
+                }
 
                 ImGui::TableNextColumn();
                 if (player.GodMode)
