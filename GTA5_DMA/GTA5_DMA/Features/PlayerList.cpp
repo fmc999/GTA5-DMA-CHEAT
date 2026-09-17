@@ -1,6 +1,7 @@
 #include "pch.h"
 
 #include "PlayerList.h"
+#include "VehicleNames.h"
 
 #include "DMA.h"
 #include "Offsets.h"
@@ -71,6 +72,18 @@ namespace
         // - InVehicleBits(0xE32) bit0: CT 验证的权威载具状态位，上下车即翻转
         // - pCVehicle(0xD10) 非空作副证：载具损毁弹出时位翻转可能滞后一帧
         out.InVehicle = (ped.InVehicleBits & 0x1) != 0 || ped.pCVehicle != nullptr;
+
+        // 第27轮：读所在载具的型号与血量（纯只读，不写任何内存）
+        if (ped.pCVehicle)
+        {
+            const uintptr_t veh = reinterpret_cast<uintptr_t>(ped.pCVehicle);
+            uint32_t model = 0;
+            if (DMA::Memory().Read(veh + offsetof(CVehicle, EntityModelHash), &model, sizeof(model)))
+                out.VehicleModel = model;
+            DMA::Memory().Read(veh + offsetof(CVehicle, Health), &out.VehicleHealth, sizeof(out.VehicleHealth));
+            DMA::Memory().Read(veh + offsetof(CVehicle, EngineHealth), &out.VehicleEngineHealth, sizeof(out.VehicleEngineHealth));
+            out.VehicleName = LookupVehicleName(out.VehicleModel);
+        }
 
         // 位置：只读 CNavigation 的 vec3（0x50 处 12 字节）
         if (ped.pCNavigation)

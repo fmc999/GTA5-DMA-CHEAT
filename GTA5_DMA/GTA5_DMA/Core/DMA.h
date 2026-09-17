@@ -101,6 +101,10 @@ public: /* Globals */
 		return Memory().Write(address + offsets.back(), &value, sizeof(value));
 	}
 
+public:
+	// 第26轮：网络时间深层探针（放宽特征码 + 每秒自增验证）
+	static int NetworkTimeDeepProbe();
+
 private: /* Private functions */
 	static bool UpdateEssentials();
 };

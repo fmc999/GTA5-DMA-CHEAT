@@ -197,6 +197,10 @@
     <ClCompile Include="Features\VehicleEditor.cpp" />
     <ClCompile Include="Features\WeaponInspector.cpp" />
     <ClCompile Include="Features\PlayerList.cpp" />
+    <ClCompile Include="Features\HeistSetup.cpp" />
+    <ClCompile Include="Features\NetTimeScan.cpp" />
+    <ClCompile Include="Features\OffRadar.cpp" />
+    <ClCompile Include="Features\TimeControl.cpp" />
     <ClCompile Include="Features\VehicleList.cpp" />
     <ClCompile Include="Features\VehicleRepair.cpp" />
     <ClCompile Include="Features\AimAid.cpp" />
@@ -215,7 +219,6 @@
     <ClCompile Include="UI\UiToast.cpp" />
     <ClCompile Include="UI\WindowState.cpp" />
     <ClCompile Include="UI\MenuManager.cpp" />
-    <ClCompile Include="Attic\TimeControl.cpp" />
     <ClCompile Include="Attic\HeistDividend.cpp" />
     <ClCompile Include="Attic\PlayerChaser.cpp" />
     <ClCompile Include="Attic\PlayerChaserMenu.cpp" />
@@ -256,7 +259,12 @@
     <ClInclude Include="Features\VehicleEditor.h" />
     <ClInclude Include="Features\WeaponInspector.h" />
     <ClInclude Include="Features\PlayerList.h" />
+    <ClInclude Include="Features\HeistSetup.h" />
+    <ClInclude Include="Features\NetTimeScan.h" />
+    <ClInclude Include="Features\OffRadar.h" />
+    <ClInclude Include="Features\TimeControl.h" />
     <ClInclude Include="Features\VehicleList.h" />
+    <ClInclude Include="Features\VehicleNames.h" />
     <ClInclude Include="Features\VehicleRepair.h" />
     <ClInclude Include="Features\AimAid.h" />
     <ClInclude Include="Features\NoIdleKick.h" />
@@ -280,7 +288,6 @@
     <ClInclude Include="UI\WindowState.h" />
     <ClInclude Include="UI\MenuManager.h" />
     <ClInclude Include="UI\AppFonts.h" />
-    <ClInclude Include="Attic\TimeControl.h" />
     <ClInclude Include="Attic\HeistDividend.h" />
     <ClInclude Include="Attic\PlayerChaser.h" />
     <ClInclude Include="Attic\PlayerChaserMenu.h" />

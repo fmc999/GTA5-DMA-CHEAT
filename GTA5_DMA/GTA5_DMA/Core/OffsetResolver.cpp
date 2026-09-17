@@ -46,6 +46,9 @@ namespace
         // 命中后: match + 0x18 + 3 处 RIP 相对 -> PoolEncryption*
         {"PedPoolPtr", "80 79 4B 00 0F 84 F5 00 00 00 48 89 F1", 0x1B, 0x1F},
         {"VehiclePoolPtr", "48 8B 05 ? ? ? ? ?? ?? ?? 48 83 78 18 0D", 0x3, 0x7},
+        // 网络时间全局（YimMenuV2 Pointers.cpp 的 networkTimePtrn）：
+        // 89 05 ?? ?? ?? ??  → mov [rip+disp], eax   → disp=2 / insn=6
+        {"NetworkTimePtr", "89 05 ?? ?? ?? ?? 80 3D ?? ?? ?? ?? ? 0F 84 ?? ?? ?? ?? E9", 2, 6},
     };
 }
 

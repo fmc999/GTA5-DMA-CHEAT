@@ -10,6 +10,8 @@
 #include "GodMode.h"
 #include "HealthManager.h"
 #include "Invisibility.h"
+#include "OffRadar.h"
+#include "HeistSetup.h"
 #include "NoCollision.h"
 #include "NoWanted.h"
 #include "PlayerList.h"
@@ -217,7 +219,7 @@ void MenuManager::RenderPlayerPageContent()
 
     // 3) 移动与外观：速度开关与其参数（野兽模式 / 速度值）同盒
     {
-        const int moveRows = 3 + (PlayerSpeed::bEnableUI ? (PlayerSpeed::bBeastModeUI ? 1 : 2) : 0);
+        const int moveRows = 5 + (PlayerSpeed::bEnableUI ? (PlayerSpeed::bBeastModeUI ? 1 : 2) : 0);
         layout2.Place(0);
         ConsoleTheme::BoxBegin("player_move", moveRows, "移动与外观", layout2.width);
 
@@ -227,6 +229,17 @@ void MenuManager::RenderPlayerPageContent()
         }
 
         ConsoleTheme::ToggleRow("no_collision", "无碰撞体积", "允许人物穿过常规碰撞体", &NoCollision::bNoCollisionUI, PlayerSpeed::bEnableUI);
+        {
+            bool radar = OffRadar::bEnabled.load();
+            if (ConsoleTheme::ToggleRow("radar_off", "雷达隐身",
+                                        "把「雷达隐身到期时间」写成当前网络时间（每秒重写）", &radar))
+            {
+                OffRadar::bEnabled.store(radar);
+            }
+            const std::string radarStatus = OffRadar::StatusText();
+            ConsoleTheme::TextRow("雷达状态", radarStatus.c_str(), OffRadar::bLocated.load(), false);
+        }
+
         ConsoleTheme::ToggleRow("speed_control", "启用速度控制", "调整步行、奔跑与游泳速度", &PlayerSpeed::bEnableUI, PlayerSpeed::bEnableUI);
 
         if (PlayerSpeed::bEnableUI)
@@ -928,6 +941,83 @@ void MenuManager::RenderProgressPageContent()
         }
         ConsoleTheme::BoxEnd();
         col.Advance(0, TitledBoxHeight(valueRows));
+    }
+
+    {
+        // 第26轮：抢劫分账（纯脚本全局写入）。公寓 / 末日 / 钻石三家，四人分账 0~100%。
+        static int s_heistSel = 0;
+        static int s_heistCut[4] = { 0, 0, 0, 0 };
+        static std::string s_heistReport;
+        static bool s_heistLoaded = false;
+        static HeistSetup::Cuts s_heistLive{};
+
+        const char* kHeistNames[3] = { "公寓抢劫", "末日抢劫", "钻石赌场" };
+        constexpr int kHeistRows = 9;   // 3 选择 + 4 滑杆 + 1 状态 + 1 写入
+
+        col.Place(0);
+        ConsoleTheme::BoxBegin("heist_cuts", kHeistRows, "抢劫分账（脚本全局）", col.width);
+
+        for (int i = 0; i < 3; ++i)
+        {
+            bool on = (s_heistSel == i);
+            char id[24] = {};
+            std::snprintf(id, sizeof(id), "heist_sel_%d", i);
+            if (ConsoleTheme::ToggleRow(id, kHeistNames[i], "选中后下面滑杆写的就是这家", &on))
+            {
+                if (on && s_heistSel != i)
+                    s_heistSel = i;
+                s_heistLoaded = false;
+            }
+        }
+
+        // 读一次现场值（切换抢劫 / 首帧）
+        if (!s_heistLoaded)
+        {
+            s_heistLive = (s_heistSel == 0) ? HeistSetup::ReadApartment()
+                        : (s_heistSel == 1) ? HeistSetup::ReadDoomsday()
+                                            : HeistSetup::ReadDiamond();
+            s_heistCut[0] = s_heistLive.player1 < 0 ? 0 : s_heistLive.player1;
+            s_heistCut[1] = s_heistLive.player2 < 0 ? 0 : s_heistLive.player2;
+            s_heistCut[2] = s_heistLive.player3 < 0 ? 0 : s_heistLive.player3;
+            s_heistCut[3] = s_heistLive.player4 < 0 ? 0 : s_heistLive.player4;
+            s_heistLoaded = true;
+        }
+
+        for (int i = 0; i < 4; ++i)
+        {
+            ImGui::PushID(1000 + i);
+            float v = static_cast<float>(s_heistCut[i]);
+            char label[32] = {};
+            std::snprintf(label, sizeof(label), "玩家 %d 分账", i + 1);
+            if (ConsoleTheme::SliderRow("cut", label, &v, 0.0f, 100.0f, "%.0f %%"))
+                s_heistCut[i] = static_cast<int>(v + 0.5f);
+            ImGui::PopID();
+        }
+
+        char liveTxt[160] = {};
+        std::snprintf(liveTxt, sizeof(liveTxt), "现场 %d / %d / %d / %d",
+                      s_heistLive.player1, s_heistLive.player2,
+                      s_heistLive.player3, s_heistLive.player4);
+        ConsoleTheme::TextRow("当前值", liveTxt, true, true);
+
+        if (ConsoleTheme::ButtonRow("写入分账", UiIcon::Zap, false, false))
+        {
+            HeistSetup::Cuts cuts;
+            cuts.player1 = s_heistCut[0];
+            cuts.player2 = s_heistCut[1];
+            cuts.player3 = s_heistCut[2];
+            cuts.player4 = s_heistCut[3];
+            const bool ok = (s_heistSel == 0) ? HeistSetup::WriteApartmentCuts(cuts, s_heistReport)
+                          : (s_heistSel == 1) ? HeistSetup::WriteDoomsdayCuts(cuts, s_heistReport)
+                                              : HeistSetup::WriteDiamondCuts(cuts, s_heistReport);
+            (void)ok;
+            s_heistLoaded = false;
+        }
+        if (!s_heistReport.empty())
+            ConsoleTheme::TextRow("上次写入", s_heistReport.c_str(), true, false);
+
+        ConsoleTheme::BoxEnd();
+        col.Advance(0, TitledBoxHeight(kHeistRows));
     }
 
     {

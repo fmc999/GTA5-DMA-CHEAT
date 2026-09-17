@@ -1,6 +1,7 @@
 #include "pch.h"
 
 #include "VehicleList.h"
+#include "VehicleNames.h"
 
 #include "DMA.h"
 #include "Offsets.h"
@@ -29,30 +30,13 @@ namespace
     std::chrono::steady_clock::time_point g_LastRefresh{};
 
     // 常见载具哈希 → 显示名（社区常用款；未命中显示哈希）
-    struct ModelNameEntry { uint32_t hash; const char* name; };
-    const ModelNameEntry kModelNames[] = {
-        { 0xB779A091, "Zentorno" },  { 0x2902077D, "T20" },
-        { 0x513F0D6E, "Adder" },     { 0x1BB29EA1, "Osiris" },
-        { 0x84D52DA6, "Tyrus" },     { 0x4C03A120, "Osiris2" },
-        { 0x18030F92, "Kuruma" },    { 0xC8DA3461, "Z-Type" },
-        { 0x0520A6E9, "Tampa" },     { 0xA4305DEA, "Elegy RH8" },
-        { 0xB92E7E0F, "Deluxo" },    { 0x4E3F2FA4, "Scramjet" },
-        { 0x9F5B4EEE, "Oppressor" }, { 0x51B36726, "Krieger" },
-        { 0xE2C290F5, "Vagner" },    { 0x77D3C6C3, "Deveste" },
-        { 0x9D0450CA, "Devil" },     { 0x6C0BEF58, "Bati 801" },
-        { 0xE65A8E1F, "Akuma" },     { 0x3BE2A26B, "Sanchez" },
-        { 0xD199EC0D, "Toreador" },  { 0x5CA49B2C, "Stromberg" },
-        { 0x056FE778, "Sultan RS" }, { 0x60C6DED1, "Sultan" },
-        { 0xB5FE537C, "Faggio" },    { 0xF92F2ED4, "BMX" },
-    };
 }
 
 const char* VehicleList::LookupModelName(uint32_t hash)
 {
-    for (const auto& e : kModelNames)
-        if (e.hash == hash)
-            return e.name;
-    return nullptr;
+    // 第27轮：改用 VehicleNames.h 的 joaat 权威表（原手写表 13/13 条哈希与名字对不上）
+    const VehicleNameEntry* e = LookupVehicleName(hash);
+    return e ? e->model : nullptr;
 }
 
 void VehicleList::RefreshVehicles()

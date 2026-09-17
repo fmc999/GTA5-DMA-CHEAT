@@ -21,6 +21,8 @@
 #include <string>
 #include <vector>
 
+#include "VehicleNames.h"
+
 struct SessionPlayer
 {
     uint32_t DisplayIndex = 0;   // 显示序号（排序后分配，稳定）
@@ -33,6 +35,11 @@ struct SessionPlayer
     float    Distance = 0.0f;
     bool     GodMode = false;
     bool     InVehicle = false;
+    // 第27轮：所在载具情报（只读）—— 模型哈希 / 中文名 / 载具血量
+    uint32_t    VehicleModel = 0;         // 载具模型哈希（0 = 不在载具或读不到）
+    const VehicleNameEntry* VehicleName = nullptr;   // 查 VehicleNames 表得到的条目（nullptr = 未收录）
+    float       VehicleHealth = 0.0f;     // 车身健康（CVehicle+0x280）
+    float       VehicleEngineHealth = 0.0f; // 引擎健康（CVehicle+0x910）
     bool     IsLocal = false;
     int32_t  WantedLevel = 0;
     uintptr_t PedAddress = 0;

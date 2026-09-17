@@ -8,6 +8,7 @@
 #include <cstdio>
 
 #include "Features.h"
+#include "OffRadar.h"
 #include "Diagnostics.h"
 #include "RuntimeTables.h"
 #include "VehicleList.h"
@@ -30,6 +31,7 @@ uintptr_t Offsets::LocalScriptsPtr = Offsets::LocalScriptsPtr_Enhanced;
 uintptr_t Offsets::GTAPlusPtr = Offsets::GTAPlusPtr_Enhanced;
 uintptr_t Offsets::PedPoolPtr = Offsets::PedPoolPtr_Enhanced;
 uintptr_t Offsets::VehiclePoolPtr = Offsets::VehiclePoolPtr_Enhanced;
+uintptr_t Offsets::NetworkTimePtr = Offsets::NetworkTimePtr_Enhanced;    // 第26轮：网络时间全局（雷达隐身）
 
 MemoryBackend& DMA::Memory() noexcept
 {
@@ -165,6 +167,7 @@ bool DMA::DMAThreadEntry()
 		ProgressFeatures::OnDMAFrame();
 		EconomyFeatures::OnDMAFrame();   // 内部含 ScriptGlobals::OnFrame()（动作格脉冲还原）
 		PlayerList::OnDMAFrame();
+		OffRadar::OnDMAFrame();
 	VehicleList::OnDMAFrame();
 
 		// 载具修复：只有收到请求时才写，常态零开销。
@@ -524,6 +527,7 @@ bool DMA::ResolveRuntimeOffsets()
 		else if (spec.name == "GTAPlusPtr") fallback = Offsets::GTAPlusPtr;
 		else if (spec.name == "PedPoolPtr") fallback = Offsets::PedPoolPtr;
     else if (spec.name == "VehiclePoolPtr") fallback = Offsets::VehiclePoolPtr;
+    else if (spec.name == "NetworkTimePtr") fallback = Offsets::NetworkTimePtr;
 		else continue;
 
 		// 候选校验器：只配给「算错会静默危害功能」的偏移（目前是 GlobalPtr / ScriptGlobals）。
@@ -545,6 +549,7 @@ bool DMA::ResolveRuntimeOffsets()
 			else if (spec.name == "GTAPlusPtr") Offsets::GTAPlusPtr = result.value;
 			else if (spec.name == "PedPoolPtr") Offsets::PedPoolPtr = result.value;
     else if (spec.name == "VehiclePoolPtr") Offsets::VehiclePoolPtr = result.value;
+    else if (spec.name == "NetworkTimePtr") Offsets::NetworkTimePtr = result.value;
 
 			std::println("[Offsets] {} = 0x{:X} (pattern{})", result.name, result.value,
 			             result.validated ? ", validated" : "");
@@ -558,4 +563,78 @@ bool DMA::ResolveRuntimeOffsets()
 
 	std::println("[Offsets] {}/{} offsets resolved from signatures.\n", resolved, catalog.size());
 	return resolved > 0;
+}
+
+
+// ============================================================================
+// 网络时间深层探针（--netptr-probe）
+//   YimMenuV2 的 networkTimePtrn 在当前线上版本失配（实测 NotFound）。
+//   这里把特征码放宽成前缀 89 05 ?? ?? ?? ?? 80 3D（mov [rip+disp], eax; cmp byte[rip+disp], imm8），
+//   对每个命中解析 RIP 目标地址，再间隔 3 秒采样两次 —— 每秒 +1 的那个就是网络时间。
+// ============================================================================
+int DMA::NetworkTimeDeepProbe()
+{
+	std::println("");
+	std::println("=== 网络时间深层探针（放宽前缀 + 每秒自增验证）===");
+
+	PVMMDLL_MAP_MODULEENTRY pModuleInfo = nullptr;
+	if (!VMMDLL_Map_GetModuleFromNameU(vmh, PID, "GTA5_Enhanced.exe", &pModuleInfo, 0) || !pModuleInfo)
+	{
+		std::println("  模块查询失败");
+		return 1;
+	}
+	const uint32_t imageSize = pModuleInfo->cbImageSize;
+	VMMDLL_MemFree(pModuleInfo);
+
+	const OffsetResolver::MemoryReader reader = [](std::uintptr_t address, void* buffer, std::size_t size, const char* stage) {
+		DWORD bytesRead = 0;
+		const BOOL ok = VMMDLL_MemReadEx(DMA::vmh, DMA::PID, static_cast<ULONG64>(address),
+			static_cast<PBYTE>(buffer), static_cast<DWORD>(size), &bytesRead,
+			VMMDLL_FLAG_NOCACHE | VMMDLL_FLAG_ZEROPAD_ON_FAIL);
+		(void)stage;
+		return ok != FALSE;
+	};
+	std::string diag = "unknown";
+	const auto section = OffsetResolver::LoadExecutableSection(reader, BaseAddress, imageSize, &diag);
+	if (!section)
+	{
+		std::println("  可执行段加载失败：{}", diag);
+		return 1;
+	}
+	std::println("  .text {} 字节，开始放宽扫描", section->bytes.size());
+
+	const auto found = PatternScanner::FindAll(section->bytes, "89 05 ?? ?? ?? ?? 80 3D");
+	std::println("  放宽前缀命中 {} 处（status={}）", found.offsets.size(), static_cast<int>(found.status));
+	if (found.offsets.empty())
+		return 1;
+
+	std::vector<std::uintptr_t> targets;
+	for (std::size_t off : found.offsets)
+	{
+		if (const auto t = PatternScanner::ResolveRelativeTarget(section->bytes, off, 2, 6, section->runtimeAddress))
+			targets.push_back(*t);
+	}
+	std::println("  解析出 {} 个候选地址，采样中（间隔 3 秒）...", targets.size());
+	std::fflush(stdout);
+
+	std::vector<uint32_t> first(targets.size(), 0), second(targets.size(), 0);
+	for (std::size_t i = 0; i < targets.size(); ++i)
+		Memory().Read(targets[i], &first[i], sizeof(uint32_t));
+	Sleep(3000);
+	for (std::size_t i = 0; i < targets.size(); ++i)
+		Memory().Read(targets[i], &second[i], sizeof(uint32_t));
+
+	int hits = 0;
+	for (std::size_t i = 0; i < targets.size(); ++i)
+	{
+		const int64_t d = static_cast<int64_t>(second[i]) - static_cast<int64_t>(first[i]);
+		const bool like = (d >= 1 && d <= 6 && second[i] > 100000);
+		if (like)
+			++hits;
+		std::println("    候选 {:<2} 地址 0x{:X}  {} → {}  Δ={} {}", i, targets[i],
+				first[i], second[i], d, like ? "← 像网络时间 ✓" : "");
+	}
+	std::println("");
+	std::println("  像网络时间的候选：{} 个", hits);
+	return hits > 0 ? 0 : 1;
 }
