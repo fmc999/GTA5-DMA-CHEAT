@@ -10,7 +10,8 @@ import re
 root = pathlib.Path(__file__).resolve().parent.parent
 out = root / "UI" / "GlyphRanges.h"
 
-sources = sorted(list(root.glob("**/*.cpp")) + list(root.glob("**/*.h")))
+sources = sorted(list(root.glob("**/*.cpp")) + list(root.glob("**/*.h"))
+                 + list(root.glob("*.txt")))   # 含 vehicle_names_extra.txt（动态载具名，需在图集里）
 chars = set()
 skipped = []
 scanned = 0

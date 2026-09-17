@@ -108,8 +108,13 @@ int main(int argc, char** argv)
 			if (!((flags[i >> 3] >> (i & 7)) & 1)) continue;
 			uintptr_t a = 0;
 			if (!DMA::Memory().Read(reinterpret_cast<uintptr_t>(pool.m_PoolAddress) + i * sizeof(uintptr_t), &a, sizeof(a)) || !a) continue;
+			// 第27轮修正：模型哈希 = m_ModelInfo(+0x20) 指向结构的 +0x18
 			uint32_t h = 0;
-			DMA::Memory().Read(a + 0x18, &h, sizeof(h));
+			{
+				uintptr_t mi2 = 0;
+				if (DMA::Memory().Read(a + 0x20, &mi2, sizeof(mi2)) && mi2)
+					DMA::Memory().Read(mi2 + 0x18, &h, sizeof(h));
+			}
 			vehAddrs.push_back(a);
 			vehHashes.push_back(h);
 		}
