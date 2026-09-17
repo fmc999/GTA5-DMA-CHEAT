@@ -2,7 +2,7 @@
 
 # GTA5 DMA Control Console
 
-[![Platform](https://img.shields.io/badge/platform-Windows-x64-blue)](https://github.com/fmc999/GTA5-DMA-CHEAT)
+[![Platform](https://img.shields.io/badge/platform-Windows_x64-blue)](https://github.com/fmc999/GTA5-DMA-CHEAT)
 [![Language](https://img.shields.io/badge/language-C%2B%2B23-00599C)](https://isocpp.org/)
 [![UI](https://img.shields.io/badge/UI-Dear%20ImGui%20%2B%20DX11-e05361)](https://github.com/ocornut/imgui)
 [![DMA](https://img.shields.io/badge/DMA-MemProcFS%20%2F%20FPGA-8A2BE2)](https://github.com/ufrisk/MemProcFS)
