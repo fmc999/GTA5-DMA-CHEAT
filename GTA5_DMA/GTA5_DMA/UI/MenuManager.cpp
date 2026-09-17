@@ -1081,7 +1081,7 @@ void MenuManager::RenderProgressPageContent()
             bool on = (s_heistSel == i);
             char id[24] = {};
             std::snprintf(id, sizeof(id), "heist_sel_%d", i);
-            if (ConsoleTheme::ToggleRow(id, kHeistNames[i], "选中后下面滑杆写的就是这家", &on))
+            if (ConsoleTheme::ToggleRow(id, kHeistNames[i], "【选择目标】只切换下面滑杆编辑哪一家，不会写入游戏", &on))
             {
                 if (on && s_heistSel != i)
                     s_heistSel = i;
@@ -1119,22 +1119,54 @@ void MenuManager::RenderProgressPageContent()
                       s_heistLive.player3, s_heistLive.player4);
         ConsoleTheme::TextRow("当前值", liveTxt, true, true);
 
-        if (ConsoleTheme::ButtonRow("写入分账", UiIcon::Zap, false, false))
+        // 第34轮（用户要求）：写入必须是我明确的动作 —— 二次确认，且显示累计次数
+        static bool s_heistArmed = false;
+        static uint32_t s_heistArmedTick = 0;
+        static int s_heistWriteCount = 0;
+        static uint32_t s_heistLastWriteTick = 0;
+        if (s_heistArmed && (GetTickCount() - s_heistArmedTick) > 5000u)
+            s_heistArmed = false;   // 5 秒内没确认就解除
+
+        if (ConsoleTheme::ButtonRow(s_heistArmed ? "确认写入（5 秒内有效）" : "写入分账",
+                                    UiIcon::Zap, s_heistArmed, false))
         {
-            HeistSetup::Cuts cuts;
-            cuts.player1 = s_heistCut[0];
-            cuts.player2 = s_heistCut[1];
-            cuts.player3 = s_heistCut[2];
-            cuts.player4 = s_heistCut[3];
-            const bool ok = (s_heistSel == 0) ? HeistSetup::WriteApartmentCuts(cuts, s_heistReport)
-                          : (s_heistSel == 1) ? HeistSetup::WriteDoomsdayCuts(cuts, s_heistReport)
-                                              : HeistSetup::WriteDiamondCuts(cuts, s_heistReport);
-            (void)ok;
-            s_heistLoaded = false;
+            if (!s_heistArmed)
+            {
+                s_heistArmed = true;
+                s_heistArmedTick = GetTickCount();
+                UiToast::Show("再点一次才会真的写入（防误触）", ToastKind::Info);
+            }
+            else
+            {
+                s_heistArmed = false;
+                HeistSetup::Cuts cuts;
+                cuts.player1 = s_heistCut[0];
+                cuts.player2 = s_heistCut[1];
+                cuts.player3 = s_heistCut[2];
+                cuts.player4 = s_heistCut[3];
+                const bool ok = (s_heistSel == 0) ? HeistSetup::WriteApartmentCuts(cuts, s_heistReport)
+                              : (s_heistSel == 1) ? HeistSetup::WriteDoomsdayCuts(cuts, s_heistReport)
+                                                  : HeistSetup::WriteDiamondCuts(cuts, s_heistReport);
+                (void)ok;
+                ++s_heistWriteCount;
+                s_heistLastWriteTick = GetTickCount();
+                s_heistLoaded = false;
+            }
         }
+
         if (!s_heistReport.empty())
             ConsoleTheme::TextRow("上次写入", s_heistReport.c_str(), true, false);
 
+
+        {
+            char cnt[160];
+            if (s_heistWriteCount > 0)
+                std::snprintf(cnt, sizeof(cnt), "本次运行已写入 %d 次（最近一次：%s）",
+                              s_heistWriteCount, s_heistReport.empty() ? "-" : s_heistReport.c_str());
+            else
+                std::snprintf(cnt, sizeof(cnt), "本次运行尚未写入任何分账 —— 它只在按上面按钮时写");
+            ConsoleTheme::TextRow("写入记录", cnt, false, false);
+        }
         ConsoleTheme::BoxEnd();
         col.Advance(0, TitledBoxHeight(kHeistRows));
     }
