@@ -954,7 +954,7 @@ void MenuManager::RenderProgressPageContent()
     {
         const ProgressFeatures::Report report = ProgressFeatures::GetReport();
         col.Place(0);
-        ConsoleTheme::BoxBegin("prog_state", 4, "生效状态", col.width);
+        ConsoleTheme::BoxBegin("prog_state", 6, "生效状态", col.width);
 
         char slots[64] = {};
         // 分母写全量（进度页关心的是 20 条 tunable + 3 个进度开关），别再写死 3 让人以为是坏的
@@ -979,9 +979,17 @@ void MenuManager::RenderProgressPageContent()
 
         char blocked[48] = {};
         std::snprintf(blocked, sizeof(blocked), "%d 次被拒/被覆盖", report.blockedWrites);
-        ConsoleTheme::TextRow("写入争用", blocked, report.blockedWrites == 0, false);
+        ConsoleTheme::TextRow("写入争用", blocked, report.blockedWrites == 0, true);
+
+        // 换战局后游戏会把 tunable 重置回默认值：工具会自动重新基线；这里也给一个手动按钮
+        char rebase[96] = {};
+        std::snprintf(rebase, sizeof(rebase), "自动重基线 %d 次 · 换战局后可手动重新获取",
+                      Tunables::GetRebaselineCount());
+        ConsoleTheme::TextRow("重新获取", rebase, Tunables::GetRebaselineCount() >= 0, true);
+        if (ConsoleTheme::ButtonRow("重新获取现场值（换战局后点一次）", UiIcon::Refresh, false))
+            Tunables::ReResolve();
         ConsoleTheme::BoxEnd();
-        col.Advance(0, TitledBoxHeight(4));
+        col.Advance(0, TitledBoxHeight(6));
     }
 
     /* ================== 右列：tunable 自检表 ================== */

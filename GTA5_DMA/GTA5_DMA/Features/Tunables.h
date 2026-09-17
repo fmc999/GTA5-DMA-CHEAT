@@ -52,6 +52,8 @@ public:
     static bool         HasWritten(uint32_t i);
     static int          GetResolvedCount();
     static int          GetBlockedWriteCount();
+    static int          GetRebaselineCount();          // 换战局/刷新后自动重新基线的次数
+    static bool         ReResolve();                    // 立即重新获取（重读现场值并重新体检）
     static int          GetAnchorElement();              // 值锚定位到的 element（-1 = 未找到）
     static const char*  GetLocatedBy(uint32_t i);        // "锚"/"相对"/"邻域"/"未定位"
     static const char*  GetEntryName(uint32_t i);

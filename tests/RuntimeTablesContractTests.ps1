@@ -18,6 +18,7 @@ $impl = Read-Source 'Core\RuntimeTables.cpp'
 $dma = Read-Source 'Core\DMA.cpp'
 $tunables = Read-Source 'Features\Tunables.cpp'
 $resolver = Read-Source 'Core\OffsetResolver.cpp'
+$resolverHeader = Read-Source 'Core\OffsetResolver.h'
 $table = Read-Source 'Features\TunableTable.h'
 $generator = Get-Content -LiteralPath (Join-Path $sourceRoot 'tools\gen_tunables.py') -Raw -Encoding UTF8
 $readme = Get-Content -LiteralPath (Join-Path $root 'README.md') -Raw -Encoding UTF8
@@ -37,7 +38,9 @@ Require ($impl -match 'tunables\.bin') 'the tunables.bin cache path is missing'
 Require ($impl -match 'hasLayout') 'pattern overrides must accept their own displacement/instruction size'
 Require ($impl -match 'disp') 'pattern override layout keyword disp is missing'
 Require ($impl -match 'insn') 'pattern override layout keyword insn is missing'
-Require ($resolver -match 'GetPatternOverrides') 'the offset resolver does not consult external pattern overrides'
+Require ($resolver -match 'g_externalProvider') 'the offset resolver does not consult the external pattern provider'
+Require ($impl -match 'SetExternalPatternProvider') 'RuntimeTables never registers the external pattern provider'
+Require ($resolverHeader -match 'ExternalPatternProvider') 'OffsetResolver has no provider type'
 
 # 3) 初始化顺序：运行时表必须在解析偏移/tunable 之前
 $initIndex = $dma.IndexOf('bool DMA::Initialize()')

@@ -4,6 +4,7 @@
 
 #include "DMA.h"
 #include "Offsets.h"
+#include "OffsetResolver.h"
 #include "TunableTable.h"
 
 #include <cstdio>
@@ -223,6 +224,25 @@ namespace
 		return true;
 	}
 
+	// 注册给偏移解析器的外部特征码桥（把 RuntimeTables 的类型转成 OffsetResolver 的中立类型）
+	std::uint32_t BridgeGetPatternOverrides(const char* offsetName, OffsetResolver::ExternalPattern* out, std::uint32_t maxCount)
+	{
+		if (!out || maxCount == 0)
+			return 0;
+
+		RuntimeTables::PatternOverride buffer[4]{};
+		const std::uint32_t limit = maxCount < 4 ? maxCount : 4;
+		const std::uint32_t count = RuntimeTables::GetPatternOverrides(offsetName, buffer, limit);
+		for (std::uint32_t i = 0; i < count; ++i)
+		{
+			out[i].pattern = buffer[i].pattern;
+			out[i].displacementOffset = buffer[i].displacementOffset;
+			out[i].instructionSize = buffer[i].instructionSize;
+			out[i].hasLayout = buffer[i].hasLayout;
+		}
+		return count;
+	}
+
 	// 首次运行写出模板，让"改文本 = 免重编译"这条路径随时可用
 	void WriteSeedFiles()
 	{
@@ -287,6 +307,9 @@ bool RuntimeTables::Initialize()
 	line += "；外部覆盖 " + std::to_string(g_overrides.size()) + " 条";
 	line += "；特征码追加 " + std::to_string(g_patternOverrideCount) + " 条";
 	std::println("{}", line);
+
+	// 把外部特征码候选接给偏移解析器（离线单测不注册 → 只用内置候选）
+	OffsetResolver::SetExternalPatternProvider(&BridgeGetPatternOverrides);
 	return true;
 }
 

@@ -41,8 +41,45 @@ namespace
 	uint32_t g_lastResolveAttempt = 0;
 	int      g_anchorElement = -1;
 	int      g_blockedWrites = 0;
-	std::mutex g_logMutex;
+	int      g_rebaselineCount = 0;      // 重新基线次数（换战局/游戏刷新把值改回默认或合法区间）
+	int      g_refusalStreak = 0;        // 连续拒绝计数 → 触发自动重新解析
+	uint32_t g_lastReresolveTick = 0;    // 上次自动重新解析时刻（限流）
+	uint32_t g_lastRefusalLogTick[Tunables::kSlotCount] = {};   // 每槽位拒绝日志限流
+	bool     g_rebaselineLogged[Tunables::kSlotCount] = {};     // 每槽位重新基线只播报一次
 	bool     g_loggedBlockUnavailable = false;
+	std::mutex g_logMutex;
+
+	// 前置声明（MatchesExpectedBits 定义在下方）
+	bool MatchesExpectedBits(const TunableTable::Entry& entry, int32_t bits);
+
+	// 「当前值是不是游戏自己放回来的合法状态」：
+	//   · Int/Float 型：等于表内已知默认值（游戏换战局/刷新 tunables 时会重置回默认）
+	//   · Value 型：落在登记区间内
+	//   · 或等于该条登记的可接受替代值（如踢出计时的 INT_MAX 禁用态）
+	// 这类值**不是**「被别的工具改过」，可以重新基线后继续写。
+	// 判定实现放在生成表里（TunableTable::IsLegitValue），运行期与离线单测共用同一份逻辑。
+	bool IsLegitCurrentValue(const TunableTable::Entry& entry, int32_t bits)
+	{
+		return TunableTable::IsLegitValue(entry, bits);
+	}
+
+	// 连续拒绝够多 → 判定「值漂移 / 换战局」，自动重新解析一次（用现场值当新基线）
+	void MaybeReResolve()
+	{
+		constexpr int kStreakTrigger = 24;
+		constexpr uint32_t kMinIntervalMs = 10000;
+		if (g_refusalStreak < kStreakTrigger)
+			return;
+
+		const uint32_t now = GetTickCount();
+		if (g_lastReresolveTick != 0 && now - g_lastReresolveTick < kMinIntervalMs)
+			return;
+
+		g_lastReresolveTick = now;
+		g_refusalStreak = 0;
+		std::println("[Tunables] 连续拒绝 {} 次 → 判定为值漂移/换战局，自动重新解析并重新基线", kStreakTrigger);
+		Tunables::Resolve();
+	}
 
 	uint32_t ChunkOf(uint32_t index) { return (index >> kChunkShift) & kChunkMask; }
 	uint32_t ElementOf(uint32_t index) { return index & kElementMask; }
@@ -137,6 +174,12 @@ namespace
 		g_processBase = 0;
 		g_hasProcessIdentity = false;
 		g_loggedBlockUnavailable = false;
+		g_refusalStreak = 0;
+		for (uint32_t i = 0; i < Tunables::kSlotCount; ++i)
+		{
+			g_lastRefusalLogTick[i] = 0;
+			g_rebaselineLogged[i] = false;
+		}
 	}
 
 	// 分页读 tunable 块（大块读在 FPGA 上遇未驻留页会整块失败，所以按 4KB 页读并统计失败页）
@@ -543,13 +586,52 @@ bool Tunables::Write(uint32_t i, int32_t value, const char* why)
 		return true;
 	}
 
-	// 写入前体检：当前值必须是原始值或本工具上次写入值，否则拒绝（防止写到被别的工具动过的格子里）
-	if (current != g_slots[i].originalBits && !(g_slots[i].haveWritten && current == g_slots[i].lastWrittenBits))
+	const TunableTable::Entry& entry = TunableTable::kEntries[i];
+	const bool matchesOriginal = current == g_slots[i].originalBits;
+	const bool matchesLast = g_slots[i].haveWritten && current == g_slots[i].lastWrittenBits;
+
+	if (!matchesOriginal && !matchesLast)
 	{
-		++g_blockedWrites;
-		std::println("[Tunables] {} 拒绝写入：当前值 {} 既非原始值 {} 也非本工具上次写入值 {}",
-		             TunableTable::kEntries[i].name, current, g_slots[i].originalBits, g_slots[i].lastWrittenBits);
-		return false;
+		// 写入前体检：当前值既不是我们记录的原始值，也不是我们上次写的值。
+		if (IsLegitCurrentValue(entry, current))
+		{
+			// 但它**是游戏自己放回来的合法状态**（换战局/刷新 tunables 把格子重置回默认值，
+			// 或金额类回到登记区间）—— 不算「被别的工具动过」，直接重新基线并继续写。
+			{
+				std::lock_guard<std::mutex> lock(g_logMutex);
+				++g_rebaselineCount;
+				if (!g_rebaselineLogged[i])
+				{
+					g_rebaselineLogged[i] = true;
+					std::println("[Tunables] {} 当前值 {} 是游戏重置后的合法值 → 重新基线并继续（换战局/刷新后不再每帧拒绝）",
+					             entry.name, current);
+				}
+			}
+			g_slots[i].originalBits = current;
+			g_refusalStreak = 0;
+		}
+		else
+		{
+			++g_blockedWrites;
+			++g_refusalStreak;
+
+			// 限流播报：同一条首次记录 + 之后每 30 秒最多一条（旧版每帧刷屏，实测累计 5000 条）
+			const uint32_t now = GetTickCount();
+			std::lock_guard<std::mutex> lock(g_logMutex);
+			if (g_lastRefusalLogTick[i] == 0 || now - g_lastRefusalLogTick[i] > 30000)
+			{
+				g_lastRefusalLogTick[i] = now;
+				std::println("[Tunables] {} 拒绝写入：当前值 {} 既非原始值 {} 也非本工具上次写入值 {}"
+				             "（同类日志 30 秒内只播报一次；连续拒绝会自动重新解析）",
+				             entry.name, current, g_slots[i].originalBits, g_slots[i].lastWrittenBits);
+			}
+			MaybeReResolve();
+			return false;
+		}
+	}
+	else
+	{
+		g_refusalStreak = 0;
 	}
 
 	if (!DMA::Memory().Write(address, &value, sizeof(value)))
@@ -690,6 +772,42 @@ int Tunables::SelfTest()
 		}
 	}
 
+	// 4) 换战局/游戏刷新会把 tunable 重置回默认值：写入闸门必须「重新基线」而不是永久拒绝
+	{
+		const int slot = Find("IDLEKICK_WARNING1");
+		if (slot >= 0 && IsResolved(static_cast<uint32_t>(slot)))
+		{
+			const uint32_t s = static_cast<uint32_t>(slot);
+			const int32_t def = GetExpectedDefault(s);        // 表内默认值（120000）
+			const int32_t disable = 2147483647;               // 防踢出用的「禁用」值
+
+			const bool step1 = Write(s, disable, "自检①写入禁用值（模拟开启防踢出）");
+			const int32_t before = ReadLive(s);
+
+			// 绕过闸门直接写回默认值：模拟「换了战局，游戏自己把 tunable 重置」
+			const bool step2 = DMA::Memory().Write(g_slots[s].address.load(), &def, sizeof(def));
+			const int32_t afterReset = ReadLive(s);
+
+			const bool step3 = Write(s, disable, "自检②换战局后重新基线并继续");
+			const int32_t back = ReadLive(s);
+
+			std::println("[selftest] 换战局重基线：写入禁用值={} 读到 {} → 模拟游戏重置为 {} → 再写入={} 读到 {} → {}",
+			             step1 ? "成功" : "失败", before, afterReset, step3 ? "成功" : "失败", back,
+			             (step1 && step2 && step3 && afterReset == def && back == disable) ? "PASS" : "FAIL");
+			if (!step1 || !step2 || !step3 || afterReset != def || back != disable)
+				rc = 1;
+
+			const bool restored = Write(s, def, "自检③还原默认值");
+			const int32_t finalValue = ReadLive(s);
+			std::println("[selftest] 还原默认 {}：读到 {} → {}", def, finalValue, finalValue == def ? "PASS" : "FAIL");
+			if (!restored || finalValue != def)
+				rc = 1;
+		}
+	}
+
+	// 5) 重新获取接口（UI 按钮走的就是它）
+	std::println("[selftest] 手动重新获取 → {}（重新基线计数 {}）", ReResolve() ? "成功" : "失败", GetRebaselineCount());
+
 	std::println("[selftest] 结论：{}", rc == 0 ? "tunable 写入路径实证通过（结束时已还原）" : "存在问题（见上）");
 	return rc;
 }
@@ -709,6 +827,26 @@ uint32_t Tunables::GetGlobalIndex(uint32_t i) { return i < kSlotCount ? TunableT
 int32_t Tunables::GetOriginal(uint32_t i) { return i < kSlotCount ? g_slots[i].originalBits : 0; }
 int32_t Tunables::GetLastWritten(uint32_t i) { return i < kSlotCount ? g_slots[i].lastWrittenBits : 0; }
 bool Tunables::HasWritten(uint32_t i) { return i < kSlotCount && g_slots[i].haveWritten; }
+int Tunables::GetRebaselineCount()
+{
+	std::lock_guard<std::mutex> lock(g_logMutex);
+	return g_rebaselineCount;
+}
+
+// 立即重新获取：重读现场值 → 重新体检 → 用现场值当新基线（换战局后点一次即可）
+bool Tunables::ReResolve()
+{
+	std::lock_guard<std::mutex> lock(g_logMutex);
+	g_refusalStreak = 0;
+	for (uint32_t i = 0; i < kSlotCount; ++i)
+	{
+		g_lastRefusalLogTick[i] = 0;
+		g_rebaselineLogged[i] = false;
+	}
+	std::println("[Tunables] 手动重新获取：重读现场值并重新体检");
+	return Tunables::Resolve();
+}
+
 int Tunables::GetBlockedWriteCount() { return g_blockedWrites; }
 int Tunables::GetAnchorElement() { return g_anchorElement; }
 const char* Tunables::GetLocatedBy(uint32_t i) { return i < kSlotCount ? g_slots[i].locatedBy : "?"; }

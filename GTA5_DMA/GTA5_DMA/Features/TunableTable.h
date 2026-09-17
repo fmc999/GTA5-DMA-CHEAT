@@ -83,6 +83,21 @@ namespace TunableTable
 
 	inline constexpr uint32_t kEntryCount = static_cast<uint32_t>(sizeof(kEntries) / sizeof(kEntries[0]));
 
+	// 运行期闸门与离线单测共用的判定：当前值是否是「游戏自己放回来的合法状态」
+	//   · Value 型：落在登记区间内
+	//   · Int/Float 型：等于表内已知默认值（换战局/刷新 tunables 时游戏会重置回默认）
+	//   · 或等于该条登记的可接受替代值（altValue，如踢出计时的 INT_MAX 禁用态）
+	inline bool IsLegitValue(const Entry& entry, int32_t bits)
+	{
+		if (entry.kind == Kind::Value)
+			return bits >= entry.minValue && bits <= entry.maxValue;
+		if (bits == entry.expectedDefault)
+			return true;
+		if (entry.altValue != 0 && bits == entry.altValue)
+			return true;
+		return false;
+	}
+
 	// 编译期钉死：索引一旦漂移（游戏更新/表生成错），这里先报错，而不是运行期写错格子
 	static_assert(kEntryCount == 20, "tunable table size changed");
 	static_assert(kEntries[0].globalIndex == 0x40055u, "IDLEKICK_WARNING1 index drifted");

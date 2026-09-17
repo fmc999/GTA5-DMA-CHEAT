@@ -1,7 +1,5 @@
 #include "OffsetResolver.h"
 
-#include "RuntimeTables.h"
-
 #include "PatternScanner.h"
 
 #include <Windows.h>
@@ -17,6 +15,9 @@ namespace
     constexpr std::size_t kChunkSize = 1024 * 1024;
     constexpr std::size_t kMaxExecutableSectionSize = 64 * 1024 * 1024;
     constexpr int kChunkReadRetries = 3;
+
+    // 外部追加特征码候选的提供者（应用启动时由 RuntimeTables 注册；未注册 = 只用内置候选）
+    OffsetResolver::ExternalPatternProvider g_externalProvider = nullptr;
 
     constexpr OffsetResolver::SignatureSpec kEnhancedCatalog[] = {
         // 主特征码来自 GTA5_Enhanced_Offsets.CT；备用特征码来自本机验证过的
@@ -50,6 +51,11 @@ namespace
 
 namespace OffsetResolver
 {
+    void SetExternalPatternProvider(ExternalPatternProvider provider)
+    {
+        g_externalProvider = provider;
+    }
+
     std::span<const SignatureSpec> GetCatalog(GameType gameType)
     {
         if (gameType == GameType::GTA5_Enhanced)
@@ -164,12 +170,12 @@ namespace OffsetResolver
                 return *hit;
         }
 
-        // 第19轮：外部文件追加候选（GTA5_DMA_patterns.txt）。
-        // 游戏大版本更新、内置候选全部失配时，往那个文件里贴一行新特征码就能继续用 —— 不需要重新编译。
+        // 第22轮：外部文件追加候选（GTA5_DMA_patterns.txt）通过**可注册的提供者**取，
+        // 应用启动时由 RuntimeTables 接上；离线单测不接 → 只用内置候选，测试工程无需链接 DMA 依赖。
+        if (g_externalProvider)
         {
-            RuntimeTables::PatternOverride overrides[4]{};
-            const std::uint32_t overrideCount =
-                RuntimeTables::GetPatternOverrides(std::string(spec.name).c_str(), overrides, 4);
+            ExternalPattern overrides[4]{};
+            const std::uint32_t overrideCount = g_externalProvider(std::string(spec.name).c_str(), overrides, 4);
             for (std::uint32_t i = 0; i < overrideCount; ++i)
             {
                 if (overrides[i].pattern.empty())

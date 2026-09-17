@@ -8,6 +8,7 @@
 #include "../GTA5_DMA/GTA5_DMA/Core/MemoryBackend.h"
 #include "../GTA5_DMA/GTA5_DMA/Features/ArmorManager.h"
 #include "../GTA5_DMA/GTA5_DMA/Features/ScriptGlobalsTable.h"
+#include "../GTA5_DMA/GTA5_DMA/Features/TunableTable.h"
 #include "../GTA5_DMA/GTA5_DMA/Core/OffsetResolver.h"
 #include "../GTA5_DMA/GTA5_DMA/Core/PatternScanner.h"
 
@@ -443,6 +444,39 @@ int main()
         assert(entry.name != nullptr && entry.purpose != nullptr);
         assert(entry.minValue <= entry.maxValue);
         assert(entry.index != 0u);
+    }
+
+    // 换战局/游戏刷新会把 tunable 重置回默认值：闸门必须认它为『游戏放回来的合法状态』，
+    // 否则会每帧拒绝写入（实测刷出 5000 条拒绝日志、防踢出功能失效）。
+    {
+        using namespace TunableTable;
+        const Entry* idle = nullptr;
+        const Entry* heist = nullptr;
+        const Entry* xp = nullptr;
+        for (const auto& e : kEntries)
+        {
+            if (std::strcmp(e.name, "IDLEKICK_WARNING1") == 0) idle = &e;
+            if (std::strcmp(e.name, "IH_PRIMARY_TARGET_VALUE_TEQUILA") == 0) heist = &e;
+            if (std::strcmp(e.name, "XP_MULTIPLIER") == 0) xp = &e;
+        }
+        assert(idle && heist && xp);
+
+        // 踢出计时：表内默认值 与 INT_MAX 禁用态 都算合法；别的值不算
+        assert(IsLegitValue(*idle, 120000));
+        assert(IsLegitValue(*idle, 2147483647));
+        assert(!IsLegitValue(*idle, 999));
+        assert(!IsLegitValue(*idle, 0));
+
+        // 金额类：区间内合法，区间外不合法
+        assert(IsLegitValue(*heist, 400000));
+        assert(IsLegitValue(*heist, 1000000));
+        assert(!IsLegitValue(*heist, 999));
+        assert(!IsLegitValue(*heist, 200000000));
+
+        // 浮点（RP 倍率）：默认位型合法，其它不合法
+        assert(IsLegitValue(*xp, xp->expectedDefault));
+        assert(!IsLegitValue(*xp, 0));
+        assert(!IsLegitValue(*xp, 1065353217));
     }
 
     return 0;

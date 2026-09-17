@@ -92,7 +92,9 @@ namespace
 			out << "  " << Tunables::GetLocatedBy(i) << "\n";
 		}
 		out << "  小计：" << resolved << "/" << Tunables::kSlotCount << " 已定位，拒绝写入 "
-		    << Tunables::GetBlockedWriteCount() << " 次\n\n";
+		    << Tunables::GetBlockedWriteCount() << " 次"
+		    << "；换战局/刷新后自动重新基线 " << Tunables::GetRebaselineCount() << " 次"
+		    << "（值被游戏重置回默认时自动继续，不再每帧拒绝）\n\n";
 	}
 
 	void WriteGlobalsBlock(std::ofstream& out)

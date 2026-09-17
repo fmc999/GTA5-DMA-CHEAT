@@ -42,6 +42,18 @@ namespace OffsetResolver
         Fallback
     };
 
+    // 外部追加的特征码候选（由应用在启动时接上 RuntimeTables；离线单测不接 → 只用内置候选，
+    // 这样测试工程不必链接 RuntimeTables/DMA 一整套依赖）
+    struct ExternalPattern
+    {
+        std::string pattern;
+        std::size_t displacementOffset = 0;
+        std::size_t instructionSize = 0;
+        bool        hasLayout = false;
+    };
+    using ExternalPatternProvider = std::uint32_t (*)(const char* offsetName, ExternalPattern* out, std::uint32_t maxCount);
+    void SetExternalPatternProvider(ExternalPatternProvider provider);
+
     struct ResolvedOffset
     {
         std::string name;
