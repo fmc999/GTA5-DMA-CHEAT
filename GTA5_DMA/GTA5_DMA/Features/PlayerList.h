@@ -38,13 +38,6 @@ struct SessionPlayer
     uintptr_t PedAddress = 0;
     uintptr_t NavigationAddress = 0;
     Vec3     Position = {};
-    // GPBD_FM 播放器统计（脚本全局 1855653；读取失败保持 0）
-    int32_t  Rank = 0;
-    int32_t  RP = 0;
-    int32_t  Money = 0;
-    float    KdRatio = 0.0f;
-    int32_t  KillsOnPlayers = 0;
-    int32_t  DeathsByPlayers = 0;
 };
 
 // 「拉到我这里」（Bring，参考 YimMenuV2 players/teleport/Bring.cpp）的落地报告。

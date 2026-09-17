@@ -10,6 +10,8 @@
 #include <chrono>
 #include <cmath>
 #include <cstring>
+#include <fstream>
+#include <iostream>
 #include <mutex>
 
 namespace
@@ -102,41 +104,6 @@ namespace
             if (DMA::Memory().Read(infoAddress + offsetof(PlayerInfo, WantedLevel), &wanted, sizeof(wanted)))
                 out.WantedLevel = wanted;
         }
-    }
-
-    // GPBD_FM 玩家统计（全局 1855653，PlayerIndex 决定条目）
-    void ReadPlayerStats(SessionPlayer& out)
-    {
-        constexpr uint32_t kGpbdFmBase = 1855653;
-        constexpr uint32_t kEntrySize = 884;      // 每玩家条目槽数
-        constexpr uint32_t kStatsSlotInEntry = 192; // PlayerStats 起始槽位
-        // PlayerStats 内字段槽位（YimMenu PLAYER_STATS 核对）
-        constexpr uint32_t kStatRP = 1;
-        constexpr uint32_t kStatRank = 6;
-        constexpr uint32_t kStatKdRatio = 22;
-        constexpr uint32_t kStatKills = 24;
-        constexpr uint32_t kStatDeaths = 25;
-        constexpr uint32_t kStatMoney = 52;
-
-        int32_t rank = 0, rp = 0, money = 0, kills = 0, deaths = 0;
-        float kd = 0.0f;
-        const uint32_t base = kGpbdFmBase + 1 + out.PlayerIndex * kEntrySize + kStatsSlotInEntry;
-        DMA::GetGlobalValue(base + kStatRank, rank);
-        DMA::GetGlobalValue(base + kStatRP, rp);
-        DMA::GetGlobalValue(base + kStatMoney, money);
-        DMA::GetGlobalValue(base + kStatKills, kills);
-        DMA::GetGlobalValue(base + kStatDeaths, deaths);
-        DMA::GetGlobalValue(base + kStatKdRatio, kd);
-        if (rank > 0 && rank < 8000)
-            out.Rank = rank;
-        if (rp >= 0)
-            out.RP = rp;
-        if (money > 0 && money < 2100000000)
-            out.Money = money;
-        out.KillsOnPlayers = kills > 0 ? kills : 0;
-        out.DeathsByPlayers = deaths > 0 ? deaths : 0;
-        if (kd >= 0.0f && kd < 100.0f)
-            out.KdRatio = kd;
     }
 
     // CNetworkPlayerMgr -> players[idx] -> RID（仅用于 RID；其余数据走 Ped 池）
@@ -320,13 +287,6 @@ void PlayerList::RefreshPlayers()
                     }
                 }
             }
-
-            // 统计（索引确定后）
-            for (auto& player : players)
-            {
-                if (player.PlayerIndex != 0xFF)
-                    ReadPlayerStats(player);
-            }
         }
 
         // 加入/退出跟踪（静默）：离开需连续 2 帧缺失才确认（防 mgr/池不同步闪烁）。
@@ -387,8 +347,6 @@ void PlayerList::RefreshPlayers()
         std::sort(players.begin(), players.end(), [](const SessionPlayer& a, const SessionPlayer& b) {
             if (a.IsLocal != b.IsLocal)
                 return a.IsLocal;             // 本地最前
-            if ((a.Rank > 0) != (b.Rank > 0))
-                return a.Rank > 0;            // 有有效统计的靠前
             return std::strncmp(a.Name, b.Name, sizeof(a.Name)) < 0;
         });
         // 重排后序号 = 显示序（1 起）
@@ -451,7 +409,6 @@ void PlayerList::RefreshPlayers()
             }
         }
 
-        ReadPlayerStats(player);
         players.push_back(player);
     }
 

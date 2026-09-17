@@ -577,16 +577,15 @@ void MenuManager::RenderSessionPageContent()
     if (tableHeight < 150.0f) tableHeight = 150.0f;
 
     ConsoleTheme::SectionHeader("玩家列表", "点击行选中玩家");
+
     if (ConsoleTheme::BoxBeginPixels("##session_players_box", tableHeight + 20.0f))
     {
-        if (ImGui::BeginTable("##session_players", 9, flags, ImVec2(0.0f, tableHeight)))
+        if (ImGui::BeginTable("##session_players", 7, flags, ImVec2(0.0f, tableHeight)))
         {
             ImGui::TableSetupScrollFreeze(0, 1);
             ImGui::TableSetupColumn("序号", ImGuiTableColumnFlags_WidthFixed, 44.0f);
             ImGui::TableSetupColumn("名称", ImGuiTableColumnFlags_WidthFixed, 130.0f);
-            ImGui::TableSetupColumn("等级", ImGuiTableColumnFlags_WidthFixed, 52.0f);
-            ImGui::TableSetupColumn("金钱", ImGuiTableColumnFlags_WidthFixed, 90.0f);
-            ImGui::TableSetupColumn("K/D", ImGuiTableColumnFlags_WidthFixed, 58.0f);
+            ImGui::TableSetupColumn("RID", ImGuiTableColumnFlags_WidthFixed, 110.0f);
             ImGui::TableSetupColumn("血量", ImGuiTableColumnFlags_WidthFixed, 60.0f);
             ImGui::TableSetupColumn("护甲", ImGuiTableColumnFlags_WidthFixed, 60.0f);
             ImGui::TableSetupColumn("距离", ImGuiTableColumnFlags_WidthFixed, 70.0f);
@@ -616,20 +615,8 @@ void MenuManager::RenderSessionPageContent()
                 }
 
                 ImGui::TableNextColumn();
-                if (player.Rank > 0)
-                    ImGui::Text("%d", player.Rank);
-                else
-                    ImGui::TextDisabled("-");
-
-                ImGui::TableNextColumn();
-                if (player.Money > 0)
-                    ImGui::Text("%.1fM", player.Money / 1000000.0);
-                else
-                    ImGui::TextDisabled("-");
-
-                ImGui::TableNextColumn();
-                if (player.KillsOnPlayers + player.DeathsByPlayers > 0)
-                    ImGui::Text("%.2f", player.KdRatio);
+                if (player.RockstarId > 0)
+                    ImGui::Text("%lld", static_cast<long long>(player.RockstarId));
                 else
                     ImGui::TextDisabled("-");
 
@@ -682,31 +669,23 @@ void MenuManager::RenderSessionPageContent()
     {
         char position[64];
         std::snprintf(position, sizeof(position), "%.0f, %.0f, %.0f", selected.Position.x, selected.Position.y, selected.Position.z);
-        char money[48];
-        std::snprintf(money, sizeof(money), "%d", selected.Money);
-        char rank[48];
-        std::snprintf(rank, sizeof(rank), "%d / %d", selected.Rank, selected.RP);
         char rid[48];
         std::snprintf(rid, sizeof(rid), "%lld", static_cast<long long>(selected.RockstarId));
 
         detail.Place(0);
-        ConsoleTheme::BoxBegin("player_detail", 4, "玩家详情", detail.width);
-        ConsoleTheme::TextRow("等级 / RP", rank, true);
-        ConsoleTheme::TextRow("金钱", money, true);
+        ConsoleTheme::BoxBegin("player_detail", 3, "玩家详情", detail.width);
         ConsoleTheme::TextRow("RID", rid, true);
+        ConsoleTheme::TextRow("名称", selected.Name, true);
         ConsoleTheme::TextRow("坐标", position, true, false);
         ConsoleTheme::BoxEnd();
-        detail.Advance(0, TitledBoxHeight(4));
+        detail.Advance(0, TitledBoxHeight(3));
 
-        char kd[64];
-        std::snprintf(kd, sizeof(kd), "%.2f (%d/%d)", selected.KdRatio, selected.KillsOnPlayers, selected.DeathsByPlayers);
         detail.Place(0);
-        ConsoleTheme::BoxBegin("player_combat", 3, "战斗数据", detail.width);
-        ConsoleTheme::TextRow("K/D", kd, true);
+        ConsoleTheme::BoxBegin("player_combat", 2, "战斗数据", detail.width);
         ConsoleTheme::TextRow("通缉等级", std::to_string(selected.WantedLevel).c_str(), true);
         ConsoleTheme::TextRow("载具状态", selected.InVehicle ? "载具中" : "步行", true, false);
         ConsoleTheme::BoxEnd();
-        detail.Advance(0, TitledBoxHeight(3));
+        detail.Advance(0, TitledBoxHeight(2));
     }
 
     {
