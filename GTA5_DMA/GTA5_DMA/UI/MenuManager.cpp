@@ -608,13 +608,13 @@ void MenuManager::RenderSessionPageContent()
         {
             ImGui::TableSetupScrollFreeze(0, 1);
             ImGui::TableSetupColumn("序号", ImGuiTableColumnFlags_WidthFixed, 44.0f);
-            ImGui::TableSetupColumn("名称", ImGuiTableColumnFlags_WidthFixed, 130.0f);
+            ImGui::TableSetupColumn("名称", ImGuiTableColumnFlags_WidthFixed, 150.0f);
             ImGui::TableSetupColumn("RID", ImGuiTableColumnFlags_WidthFixed, 110.0f);
             ImGui::TableSetupColumn("血量", ImGuiTableColumnFlags_WidthFixed, 60.0f);
             ImGui::TableSetupColumn("护甲", ImGuiTableColumnFlags_WidthFixed, 60.0f);
             ImGui::TableSetupColumn("距离", ImGuiTableColumnFlags_WidthFixed, 70.0f);
-            ImGui::TableSetupColumn("载具", ImGuiTableColumnFlags_WidthFixed, 150.0f);
-            ImGui::TableSetupColumn("BE", ImGuiTableColumnFlags_WidthFixed, 52.0f);
+            ImGui::TableSetupColumn("载具", ImGuiTableColumnFlags_WidthFixed, 78.0f);
+            ImGui::TableSetupColumn("BE", ImGuiTableColumnFlags_WidthFixed, 64.0f);
             ImGui::TableSetupColumn("状态", ImGuiTableColumnFlags_WidthFixed, 96.0f);
             ImGui::TableHeadersRow();
 
@@ -670,17 +670,23 @@ void MenuManager::RenderSessionPageContent()
                 ImGui::TableNextColumn();
                 // 第27轮：所在载具（只读）。模型哈希取自 CVehicle+0x20 → CBaseModelInfo+0x18，
                 // 已用 921 条官方全表实测验证（24/25 辆命中），中文名为官方译名。
+                // 第29轮：载具列收敛到 78px —— 只显示车名（过长省略），细节进悬浮提示；
+                // 未收录型号显示「未收录」，哈希放到提示里，界面不塞长哈希。
                 if (player.VehicleName)
                 {
                     ImGui::TextColored(ConsoleTheme::Accent(), "%s", player.VehicleName->cn);
                     if (ImGui::IsItemHovered())
-                        ImGui::SetTooltip("%s（%s）｜模型名 %s｜哈希 0x%08X",
+                        ImGui::SetTooltip("%s（%s）｜模型 %s｜哈希 0x%08X｜车身 %.0f 引擎 %.0f",
                                          player.VehicleName->cn, player.VehicleName->kind,
-                                         player.VehicleName->model, player.VehicleModel);
+                                         player.VehicleName->model, player.VehicleModel,
+                                         player.VehicleHealth, player.VehicleEngineHealth);
                 }
                 else if (player.VehicleModel != 0)
                 {
-                    ImGui::TextDisabled("0x%08X", player.VehicleModel);
+                    ImGui::TextDisabled("未收录");
+                    if (ImGui::IsItemHovered())
+                        ImGui::SetTooltip("型号哈希 0x%08X（不在 921 条名表里，可写进 vehicle_names_extra.txt 补名）｜车身 %.0f 引擎 %.0f",
+                                         player.VehicleModel, player.VehicleHealth, player.VehicleEngineHealth);
                 }
                 else
                 {
@@ -697,7 +703,11 @@ void MenuManager::RenderSessionPageContent()
                     if (beRunning)
                         ImGui::TextDisabled("查…");
                     else if (be && be->state == BanCheck::State::Banned)
+                    {
                         ImGui::TextColored(ConsoleTheme::Danger(), "封");
+                        if (ImGui::IsItemHovered())
+                            ImGui::SetTooltip("已被 BattlEye 封禁：%s", be->reason.c_str());
+                    }
                     else if (be && be->state == BanCheck::State::Clean)
                         ImGui::TextColored(ConsoleTheme::Accent(), "正常");
                     else if (be)
@@ -782,8 +792,9 @@ void MenuManager::RenderSessionPageContent()
             ConsoleTheme::TextRow("BE 封禁", beText, true);
 
             char queueText[96];
-            std::snprintf(queueText, sizeof(queueText), "已排队 %d · 已缓存 %d",
-                          BanCheck::PendingCount(), BanCheck::CachedCount());
+            std::snprintf(queueText, sizeof(queueText), "进行中 %d · 排队 %d · 已缓存 %d · 并行峰值 %d",
+                          BanCheck::ActiveCount(), BanCheck::PendingCount(),
+                          BanCheck::CachedCount(), BanCheck::ParallelPeak());
             ConsoleTheme::TextRow("自动查询", queueText, false);
         }
         ConsoleTheme::BoxEnd();

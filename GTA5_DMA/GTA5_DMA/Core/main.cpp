@@ -72,19 +72,13 @@ int main(int argc, char** argv)
 			std::printf("[BanCheck] 启动失败: %s\n", BanCheck::LastError().c_str());
 			return 1;
 		}
-		for (int i = 0; i < 200; ++i)
+		const int st = BanCheck::WaitFor(rid, 20000);   // 并行引擎内部自己 Tick
+		switch (st)
 		{
-			BanCheck::Tick();
-			if (BanCheck::Current() != BanCheck::State::Checking)
-				break;
-			Sleep(100);
-		}
-		switch (BanCheck::Current())
-		{
-		case BanCheck::State::Banned:
+		case 2:
 			std::printf("[BanCheck] RID %lld -> 已封禁 | 理由: %s\n", rid, BanCheck::Reason().c_str());
 			return 0;
-		case BanCheck::State::Clean:
+		case 3:
 			std::printf("[BanCheck] RID %lld -> 未封禁（无 BE 封禁记录）\n", rid);
 			return 0;
 		default:

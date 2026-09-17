@@ -1,17 +1,16 @@
 // ============================================================================
-// BanCheck.cpp —— BattlEye 封禁查询（自动队列 + 持久缓存）
+// BanCheck.cpp —— BattlEye 封禁查询（并行引擎 + 持久缓存）
 //
-// 结构与调用序列完全对齐 BEServer_x64.dll 的服务端 API（api_level = 1）：
-//   Init(1, &user_data, &api)
-//   api.add_player(peerid, ip = -1, port = 0, name, false)
-//   api.assign_guid(peerid, base64(rid))          // GUID = base64(RID 字符串)
-//   api.assign_guid_verified(peerid, base64(rid))
-//   api.set_player_state(peerid, 1)               // 1 = 请求校验
-//   loop { api.run(); }  ← 被封禁时 BE 回调 kick_player(peerid, reason)
+// 原理：用 BattlEye 官方服务端库 BEServer_x64.dll 起一个「虚拟服务端」，
+//       把每个待查 RID（base64）注册成一个虚拟玩家的 GUID，再让 BE 主服务器校验：
+//         被封禁 → BE 回调 kick_player(peerId, reason)，reason 即封禁理由
+//         超时无回调 → 未封禁
 //
-// 自动模式：界面每帧把战局里的 RID 交给 AutoQuery()，本模块串行查询
-// （同一时刻只查一个，两个查询之间留间隔），结果落盘 be_bans_cache.json，
-// 24 小时内的结果直接复用，不重复问 BE。
+// 并行：一次 Init 建立会话，同一会话里同时挂 kMaxParallel 个虚拟玩家（每个 RID 一个
+//       peerId），谁先出结果谁先让位给队列里的下一个。封禁答复实测 1.8~3.3 秒，
+//       所以 26 个玩家大约 3~4 轮就跑完（原来串行要 2.8 分钟）。
+//
+// 缓存：结果落盘 be_bans_cache.json（exe 同目录），24 小时内复用，不重复问 BE。
 // ============================================================================
 
 #include "pch.h"
@@ -21,12 +20,14 @@
 #include <windows.h>
 
 #include <chrono>
+#include <cctype>
 #include <cstdio>
 #include <cstring>
 #include <deque>
 #include <fstream>
 #include <sstream>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace BanCheck
@@ -71,26 +72,37 @@ namespace BanCheck
 
         using init_t = bool(*)(int api_level, BattlEyeUserData* data, BattlEyeApi* api);
 
-        constexpr uint64_t kPeerId = 1337;
-        constexpr int      kTimeoutMs = 6000;      // 单个查询等待上限（实测封禁答复 1.8~3.3 秒，留 2 倍余量）
-        constexpr int      kGapMs = 600;           // 两个查询之间的间隔（别把 BE 问爆）
-        constexpr uint64_t kFreshSec = 24 * 3600;  // 缓存有效期：24 小时
+        constexpr int      kMaxParallel = 10;      // 同时挂几个虚拟玩家（实测 BE 支持并发，批内同时出结果）
+        constexpr int      kTimeoutMs = 5000;      // 单个 RID 等待上限（封禁答复实测 ≤3.3s，留 1.5 倍余量）
+        constexpr uint64_t kFreshSec = 24 * 3600;  // 缓存有效期
+        constexpr uint64_t kBasePeer = 1337;
+
+        // 一个正在查询的槽位
+        struct Slot
+        {
+            long long rid = 0;
+            uint64_t  peer = 0;
+            uint64_t  startedAt = 0;
+        };
 
         HMODULE         g_dll = nullptr;
         init_t          g_init = nullptr;
         BattlEyeApi     g_api{};
-        std::string     g_reason;
-        std::string     g_error;
-        std::string     g_pendingReason;
-        long long       g_rid = 0;
-        State           g_state = State::Idle;
-        uint64_t        g_startedAt = 0;
-        uint64_t        g_lastFinish = 0;
+        bool            g_session = false;      // BE 会话是否已 Init
+
+        std::vector<Slot>     g_slots;          // 并行中的槽位
+        std::deque<long long> g_queue;          // 待查队列（去重）
+        std::unordered_map<uint64_t, long long> g_peerToRid;
+
         std::vector<Cached>   g_cache;
-        std::deque<long long> g_queue;   // 待查询 RID（去重）
         bool            g_cacheLoaded = false;
         std::string     g_cachePath;
+        std::string     g_error;
+        std::string     g_lastReason;           // 最近一次封禁理由（界面显示用）
+        long long       g_lastBannedRid = 0;
         uint64_t        g_queriesDone = 0;
+        uint64_t        g_parallelPeak = 0;
+        uint64_t        g_nextPeer = kBasePeer;
 
         uint64_t NowMs()
         {
@@ -148,6 +160,16 @@ namespace BanCheck
             return out;
         }
 
+        // 只有明确是封禁的理由才算「已封禁」，其它 kick 原因按原样记录下来
+        bool LooksLikeBan(const std::string& reason)
+        {
+            std::string low;
+            low.reserve(reason.size());
+            for (char c : reason)
+                low.push_back(static_cast<char>(::tolower(static_cast<unsigned char>(c))));
+            return low.find("ban") != std::string::npos;
+        }
+
         // ---------------------------------------------------------------- 缓存文件
         void LoadCache()
         {
@@ -162,7 +184,6 @@ namespace BanCheck
             ss << f.rdbuf();
             const std::string text = ss.str();
 
-            // 极简解析：每条形如 {"rid":123,"state":2,"reason":"...","at":1700000000}
             size_t pos = 0;
             while ((pos = text.find("\"rid\":", pos)) != std::string::npos)
             {
@@ -243,9 +264,25 @@ namespace BanCheck
         }
 
         // ---------------------------------------------------------------- 回调
-        void OnKick(uint64_t /*id*/, const char* reason)
+        void OnKick(uint64_t peerId, const char* reason)
         {
-            g_pendingReason = reason ? reason : "";
+            const std::string r = reason ? reason : "";
+            for (size_t i = 0; i < g_slots.size(); ++i)
+            {
+                if (g_slots[i].peer == peerId)
+                {
+                    const long long rid = g_slots[i].rid;
+                    const State st = LooksLikeBan(r) ? State::Banned : State::Clean;
+                    g_lastReason = r;
+                    if (st == State::Banned)
+                        g_lastBannedRid = rid;
+                    AppendCache(rid, st, r);
+                    ++g_queriesDone;
+                    g_peerToRid.erase(peerId);
+                    g_slots.erase(g_slots.begin() + i);
+                    return;
+                }
+            }
         }
         void OnLog(const char*, int) {}
         void OnMessage(uint64_t, const void*, uint32_t) {}
@@ -254,7 +291,6 @@ namespace BanCheck
         {
             if (g_init)
                 return true;
-
             HMODULE dll = LoadLibraryA("BEServer_x64.dll");
             if (!dll)
             {
@@ -278,8 +314,13 @@ namespace BanCheck
             return true;
         }
 
-        void InitApi()
+        bool EnsureSession()
         {
+            if (g_session && g_api.run)
+                return true;
+            if (!EnsureLoaded())
+                return false;
+
             BattlEyeUserData ud{};
             ud.game_name = "paradise";
             ud.log_func = &OnLog;
@@ -288,16 +329,33 @@ namespace BanCheck
             ud.unk = nullptr;
             g_api = BattlEyeApi{};
             g_init(1, &ud, &g_api);
+            g_session = (g_api.run != nullptr);
+            return g_session;
         }
 
-        void FinishQuery(State result, const std::string& reason)
+        // 把某个 RID 挂上 BE 会话（占用一个新 peerId）
+        bool Attach(long long rid, uint64_t peer)
         {
-            g_reason = reason;
-            g_state = result;
-            AppendCache(g_rid, result, reason);
-            g_lastFinish = NowMs();
-            ++g_queriesDone;
-            Stop();
+            const std::string guid = Base64(std::to_string(rid));
+            if (g_api.add_player) g_api.add_player(peer, static_cast<uint32_t>(-1), 0, "Deez", 0);
+            if (g_api.assign_guid) g_api.assign_guid(peer, guid.data(), static_cast<uint32_t>(guid.size()));
+            if (g_api.assign_guid_verified) g_api.assign_guid_verified(peer, guid.data(), static_cast<uint32_t>(guid.size()));
+            if (g_api.set_player_state) g_api.set_player_state(peer, 1);
+            return true;
+        }
+
+        void StartSlot(long long rid)
+        {
+            const uint64_t peer = g_nextPeer++;
+            Attach(rid, peer);
+            Slot s{};
+            s.rid = rid;
+            s.peer = peer;
+            s.startedAt = NowMs();
+            g_slots.push_back(s);
+            g_peerToRid[peer] = rid;
+            if (g_slots.size() > g_parallelPeak)
+                g_parallelPeak = g_slots.size();
         }
     }  // namespace
 
@@ -306,28 +364,13 @@ namespace BanCheck
         return EnsureLoaded();
     }
 
+    // 兼容 CLI：立刻建会话并挂上这一个 RID
     bool Start(long long rid)
     {
-        Stop();
-        if (!EnsureLoaded())
-        {
-            g_state = State::Failed;
+        LoadCache();
+        if (!EnsureSession())
             return false;
-        }
-        g_reason.clear();
-        g_pendingReason.clear();
-        g_rid = rid;
-        InitApi();
-
-        const std::string guid = Base64(std::to_string(rid));
-
-        if (g_api.add_player) g_api.add_player(kPeerId, static_cast<uint32_t>(-1), 0, "Deez", 0);
-        if (g_api.assign_guid) g_api.assign_guid(kPeerId, guid.data(), static_cast<uint32_t>(guid.size()));
-        if (g_api.assign_guid_verified) g_api.assign_guid_verified(kPeerId, guid.data(), static_cast<uint32_t>(guid.size()));
-        if (g_api.set_player_state) g_api.set_player_state(kPeerId, 1);
-
-        g_startedAt = NowMs();
-        g_state = State::Checking;
+        StartSlot(rid);
         return true;
     }
 
@@ -339,67 +382,75 @@ namespace BanCheck
         for (const auto& c : g_cache)
         {
             if (c.rid == rid && CacheFresh(c))
-                return;   // 已有新鲜结果
+                return;
         }
-        if (g_state == State::Checking && g_rid == rid)
-            return;       // 正在查这个
+        for (const auto& s : g_slots)
+        {
+            if (s.rid == rid)
+                return;
+        }
         for (long long q : g_queue)
         {
             if (q == rid)
-                return;   // 已在队列里
+                return;
         }
         g_queue.push_back(rid);
     }
 
-    int PendingCount()
-    {
-        return static_cast<int>(g_queue.size());
-    }
-
-    int CachedCount()
-    {
-        LoadCache();
-        return static_cast<int>(g_cache.size());
-    }
-
+    int PendingCount() { return static_cast<int>(g_queue.size()); }
+    int ActiveCount() { return static_cast<int>(g_slots.size()); }
+    int ParallelPeak() { return static_cast<int>(g_parallelPeak); }
+    int CachedCount() { LoadCache(); return static_cast<int>(g_cache.size()); }
     uint64_t QueriesDone() { return g_queriesDone; }
 
     void Tick()
     {
         LoadCache();
-
-        if (g_state == State::Checking)
-        {
-            if (g_api.run)
-                g_api.run();
-
-            if (!g_pendingReason.empty())
-            {
-                FinishQuery(State::Banned, g_pendingReason);
-                return;
-            }
-            if (NowMs() - g_startedAt > static_cast<uint64_t>(kTimeoutMs))
-                FinishQuery(State::Clean, std::string());
+        if (!g_session && g_queue.empty() && g_slots.empty())
             return;
+
+        if (!EnsureSession())
+            return;
+
+        // 1) 收割超时的槽位（未封禁）
+        const uint64_t now = NowMs();
+        for (size_t i = 0; i < g_slots.size();)
+        {
+            if (now - g_slots[i].startedAt > static_cast<uint64_t>(kTimeoutMs))
+            {
+                const long long rid = g_slots[i].rid;
+                const uint64_t peer = g_slots[i].peer;
+                AppendCache(rid, State::Clean, std::string());
+                ++g_queriesDone;
+                g_peerToRid.erase(peer);
+                g_slots.erase(g_slots.begin() + i);
+                continue;
+            }
+            ++i;
         }
 
-        // 空闲：从队列取下一个（两个查询之间留间隔）
-        if (!g_queue.empty() && (g_lastFinish == 0 || NowMs() - g_lastFinish >= static_cast<uint64_t>(kGapMs)))
+        // 2) 补满并行槽位
+        while (!g_queue.empty() && static_cast<int>(g_slots.size()) < kMaxParallel)
         {
             const long long next = g_queue.front();
             g_queue.pop_front();
-            if (!Available())
-            {
-                g_state = State::Failed;
-                return;
-            }
-            Start(next);
+            StartSlot(next);
         }
+
+        // 3) 驱动 BE 网络循环
+        if (g_api.run)
+            g_api.run();
     }
 
-    State Current() { return g_state; }
-    const std::string& Reason() { return g_reason; }
-    long long CurrentRid() { return g_rid; }
+    State Current()
+    {
+        if (!g_slots.empty())
+            return State::Checking;
+        return State::Idle;
+    }
+    const std::string& Reason() { return g_lastReason; }
+    long long CurrentRid() { return g_lastBannedRid; }
+    long long LastBannedRid() { return g_lastBannedRid; }
     const std::string& LastError() { return g_error; }
 
     void Stop()
@@ -407,8 +458,24 @@ namespace BanCheck
         if (g_api.shutdown)
             g_api.shutdown();
         g_api = BattlEyeApi{};
-        if (g_state == State::Checking)
-            g_state = State::Idle;
+        g_session = false;
+        g_slots.clear();
+        g_peerToRid.clear();
+    }
+
+    // CLI 用：等某个 RID 出结果（内部自己 Tick）
+    int WaitFor(long long rid, int timeoutMs)
+    {
+        const uint64_t t0 = NowMs();
+        while (NowMs() - t0 < static_cast<uint64_t>(timeoutMs))
+        {
+            Tick();
+            const Cached* c = FindCached(rid);
+            if (c && c->state != State::Idle)
+                return c->state == State::Banned ? 2 : 3;
+            Sleep(50);
+        }
+        return 0;
     }
 
     const Cached* FindCached(long long rid)

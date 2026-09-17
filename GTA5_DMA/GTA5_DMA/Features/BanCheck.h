@@ -40,6 +40,10 @@ namespace BanCheck
     // ---- 自动查询（界面每帧调用即可；内部去重、串行排队、24 小时缓存）----
     void AutoQuery(long long rid);
     int  PendingCount();      // 还在排队的数量
+    int  ActiveCount();       // 正在查询中的数量（并行槽位）
+    int  ParallelPeak();      // 并行度峰值
+    long long LastBannedRid();
+    int  WaitFor(long long rid, int timeoutMs);   // CLI：等某个 RID 出结果（2=封禁 3=未封禁 0=超时）
     int  CachedCount();       // 已缓存的结果数
     uint64_t QueriesDone();   // 本次运行完成的查询数
 
