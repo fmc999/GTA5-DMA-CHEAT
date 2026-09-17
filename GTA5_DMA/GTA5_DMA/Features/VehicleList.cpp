@@ -2,6 +2,7 @@
 
 #include "VehicleList.h"
 #include "VehicleNames.h"
+#include "VehicleNameOverrides.h"
 
 #include "DMA.h"
 #include "Offsets.h"
@@ -35,7 +36,7 @@ namespace
 const char* VehicleList::LookupModelName(uint32_t hash)
 {
     // 第27轮：改用 VehicleNames.h 的 joaat 权威表（原手写表 13/13 条哈希与名字对不上）
-    const VehicleNameEntry* e = LookupVehicleName(hash);
+    const VehicleNameEntry* e = LookupVehicleNameEx(hash);
     return e ? e->model : nullptr;
 }
 

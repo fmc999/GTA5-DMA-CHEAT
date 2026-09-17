@@ -17,6 +17,7 @@
 #include <map>
 #include <unordered_map>
 #include "PlayerList.h"
+#include "VehicleNameOverrides.h"
 #include "VehicleList.h"
 #include "NetTimeScan.h"
 
@@ -141,7 +142,7 @@ int main(int argc, char** argv)
 				{
 					uint32_t v = 0;
 					std::memcpy(&v, vb.data() + off, 4);
-					if (LookupVehicleName(v))
+					if (LookupVehicleNameEx(v))
 						vehHits[off / 4]++;
 				}
 
@@ -160,7 +161,7 @@ int main(int argc, char** argv)
 						{
 							uint32_t v = 0;
 							std::memcpy(&v, mb.data() + off, 4);
-							if (LookupVehicleName(v))
+							if (LookupVehicleNameEx(v))
 								miHits[off / 4]++;
 						}
 						++sampled;
@@ -200,11 +201,11 @@ int main(int argc, char** argv)
 				}
 				if ((int)distinct.size() < (int)vehAddrs.size() - 4) continue;
 				int tableHits = 0;
-				for (const auto& kv : distinct) if (LookupVehicleName(kv.first)) ++tableHits;
+				for (const auto& kv : distinct) if (LookupVehicleNameEx(kv.first)) ++tableHits;
 				std::println("    +0x{:03X}  不同取值 {} / {}   名表命中 {}", off, distinct.size(), vehAddrs.size(), tableHits);
 				for (const auto& kv : distinct)
 				{
-					const VehicleNameEntry* e = LookupVehicleName(kv.first);
+					const VehicleNameEntry* e = LookupVehicleNameEx(kv.first);
 					if (e) std::println("        ★ 0x{:08X} → {}（{}）", kv.first, e->cn, e->model);
 				}
 			}
@@ -212,7 +213,7 @@ int main(int argc, char** argv)
 		std::println("=== 池内真实载具（前 {} 辆）===", vehAddrs.size());
 		for (size_t i = 0; i < vehAddrs.size(); ++i)
 		{
-			const VehicleNameEntry* e = LookupVehicleName(vehHashes[i]);
+			const VehicleNameEntry* e = LookupVehicleNameEx(vehHashes[i]);
 			float h280 = 0.0f;
 			DMA::Memory().Read(vehAddrs[i] + 0x280, &h280, sizeof(h280));
 			std::println("  [{:>2}] 0x{:X}  +0x18=0x{:08X}  +0x280={:.0f}  {}", i, vehAddrs[i], vehHashes[i], h280,
@@ -235,7 +236,7 @@ int main(int argc, char** argv)
 			{
 				if (v == vehAddrs[k])
 				{
-					const VehicleNameEntry* e = LookupVehicleName(vehHashes[k]);
+					const VehicleNameEntry* e = LookupVehicleNameEx(vehHashes[k]);
 					std::println("  ★ +0x{:04X} → 载具 0x{:X}（{}）", off, v, e ? e->cn : "未收录");
 					++found;
 				}
@@ -289,7 +290,7 @@ int main(int argc, char** argv)
 			{
 				uint32_t v = 0;
 				std::memcpy(&v, buf.data() + off, 4);
-				const VehicleNameEntry* e = LookupVehicleName(v);
+				const VehicleNameEntry* e = LookupVehicleNameEx(v);
 				if (e)
 					std::println("    ★ +0x{:03X} = 0x{:08X} → {}（{}）", off, v, e->cn, e->model);
 			}
@@ -319,7 +320,7 @@ int main(int argc, char** argv)
 		int named = 0;
 		for (const auto& v : vs)
 		{
-			const VehicleNameEntry* e = LookupVehicleName(v.ModelHash);
+			const VehicleNameEntry* e = LookupVehicleNameEx(v.ModelHash);
 			const char* nm = e ? e->model : nullptr;
 			if (nm)
 				++named;

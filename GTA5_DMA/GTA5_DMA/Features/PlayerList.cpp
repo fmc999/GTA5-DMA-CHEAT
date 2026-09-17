@@ -2,6 +2,7 @@
 
 #include "PlayerList.h"
 #include "VehicleNames.h"
+#include "VehicleNameOverrides.h"
 
 #include "DMA.h"
 #include "Offsets.h"
@@ -85,7 +86,7 @@ namespace
             out.VehicleModel = model;
             DMA::Memory().Read(veh + offsetof(CVehicle, Health), &out.VehicleHealth, sizeof(out.VehicleHealth));
             DMA::Memory().Read(veh + offsetof(CVehicle, EngineHealth), &out.VehicleEngineHealth, sizeof(out.VehicleEngineHealth));
-            out.VehicleName = LookupVehicleName(out.VehicleModel);
+            out.VehicleName = LookupVehicleNameEx(out.VehicleModel);
         }
 
         // 位置：只读 CNavigation 的 vec3（0x50 处 12 字节）
