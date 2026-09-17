@@ -23,7 +23,7 @@ public: /* Interface variables */
 
 	// 构建标记：载具页「战局载具」区常显，用来确认正在跑的 exe 是不是最新修复版
 	// （实机排查"点传送到它却像把车拉过来"时，先看面板上这一串）。
-	static constexpr const char* BuildTag = "v3.5-esp";
+	static constexpr const char* BuildTag = "v3.4-rid";
 
 public: /* DMA Interface function */
 	static bool IsReady() noexcept { return vmh != 0 && PID != 0; }
