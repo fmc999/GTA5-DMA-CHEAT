@@ -21,6 +21,7 @@
 #include "VehicleEditor.h"
 #include "WeaponInspector.h"
 #include "AimAid.h"
+#include "Esp.h"
 #include "NoIdleKick.h"
 #include "Tunables.h"
 #include "ProgressFeatures.h"
@@ -738,6 +739,7 @@ void MenuManager::RenderSessionPageContent()
 
 void MenuManager::RenderAimPageContent()
 {
+    Esp::RenderOverlay();   // 方框透视：画在本窗口画布上（背景层）
     // 本页只保留「自瞄」本身：用 DMA 直接改写游戏里辅助瞄准的四处判定代码
     // （参考 YimMenuV2 Aimbot 的字节补丁，改成纯 DMA 写入，无注入 / 无远程线程）。
     // 补丁点由 AimAid::Resolve() 在启动时按特征码定位；任一失败则该条保持禁用，
@@ -774,6 +776,57 @@ void MenuManager::RenderAimPageContent()
         }
         ConsoleTheme::BoxEnd();
         col.Advance(0, TitledBoxHeight(3));
+    }
+
+
+    // 3) 方框透视（纯 DMA：自己读视投影矩阵做投影，画在本窗口画布上）
+    {
+        col.Place(0);
+        ConsoleTheme::BoxBegin("aim_esp", 9, "方框透视（ESP）", col.width);
+
+        bool espOn = Esp::bEnable.load();
+        if (ConsoleTheme::ToggleRow("esp_main", "方框透视", "画在世界→屏幕投影位置（纯 DMA，不注入）", &espOn, true))
+        {
+            Esp::bEnable.store(espOn);
+            if (espOn)   // 开启时自动尝试定位矩阵（后台线程，不卡界面）
+            {
+                EspMatrix probe{};
+                if (!Esp::GetMatrix(probe))
+                    Esp::RequestLocate();
+            }
+        }
+
+        bool box = Esp::bBox.load();
+        if (ConsoleTheme::ToggleRow("esp_box", "方框", "玩家轮廓框", &box, false))
+            Esp::bBox.store(box);
+
+        bool nm = Esp::bName.load();
+        if (ConsoleTheme::ToggleRow("esp_name", "名称", "框上方显示玩家名", &nm, false))
+            Esp::bName.store(nm);
+
+        bool dist = Esp::bDistance.load();
+        if (ConsoleTheme::ToggleRow("esp_dist", "距离", "框上方显示距离（米）", &dist, false))
+            Esp::bDistance.store(dist);
+
+        bool hp = Esp::bHealth.load();
+        if (ConsoleTheme::ToggleRow("esp_hp", "血量条", "框左侧血量条", &hp, false))
+            Esp::bHealth.store(hp);
+
+        float maxDist = Esp::MaxDistance.load();
+        if (ConsoleTheme::SliderRow("esp_maxdist", "最大距离", &maxDist, 50.0f, 2000.0f, "%.0f m", true))
+            Esp::MaxDistance.store(maxDist);
+
+        float boxScale = Esp::BoxScale.load();
+        if (ConsoleTheme::SliderRow("esp_boxscale", "方框高度", &boxScale, 0.6f, 1.6f, "%.2f x", false))
+            Esp::BoxScale.store(boxScale);
+
+        ConsoleTheme::TextRow("矩阵", Esp::GetMatrixStatus().c_str(), !Esp::IsLocating(), false);
+        if (ConsoleTheme::ButtonRow(Esp::IsLocating() ? "定位中…（请稍候）" : "定位 / 重新定位矩阵",
+                                    UiIcon::Target, false))
+            Esp::RequestLocate();
+
+        ConsoleTheme::BoxEnd();
+        col.Advance(0, TitledBoxHeight(9));
     }
 
     /* ================== 右列：补丁点状态 ================== */

@@ -11,6 +11,8 @@
 #include "ScriptThreads.h"
 #include "EconomyFeatures.h"
 #include "Diagnostics.h"
+#include "Esp.h"
+#include <cstdlib>
 
 
 int main(int argc, char** argv)
@@ -42,6 +44,34 @@ int main(int argc, char** argv)
 		}
 		ScriptThreads::LogRunningScripts(8);
 		const int rc = EconomyFeatures::SelfTest();
+		DMA::Close();
+		return rc;
+	}
+
+	// ESP 相机字段检查（CNavigation 相机坐标是否可用）
+	if (argc > 1 && std::string(argv[1]) == "--esp-cam")
+	{
+		AppRuntime::Reset();
+		if (!DMA::Initialize())
+		{
+			std::cerr << "[cam] DMA 初始化失败\n";
+			return 1;
+		}
+		const int rc = Esp::ProbeCamera();
+		DMA::Close();
+		return rc;
+	}
+
+	// ESP 诊断：扫描视投影矩阵并做几何验证（纯 DMA，不调游戏函数）
+	if (argc > 1 && std::string(argv[1]) == "--esp-probe")
+	{
+		AppRuntime::Reset();
+		if (!DMA::Initialize())
+		{
+			std::cerr << "[esp] DMA 初始化失败（设备被占用或游戏未运行）\n";
+			return 1;
+		}
+		const int rc = Esp::ProbeMatrix(argc > 2 ? std::atoi(argv[2]) : 96);
 		DMA::Close();
 		return rc;
 	}
