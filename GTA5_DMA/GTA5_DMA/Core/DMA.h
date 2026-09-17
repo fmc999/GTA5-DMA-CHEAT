@@ -27,6 +27,9 @@ public: /* Interface variables */
 
 public: /* DMA Interface function */
 	static bool IsReady() noexcept { return vmh != 0 && PID != 0; }
+
+	// CLI 探针需要显式刷新本地玩家/世界指针（GUI 里由 DMA 线程每帧做）
+	static bool UpdateEssentials();
 	static bool ResolveRuntimeOffsets();  // 启动时特征码扫描，动态解析 Enhanced 偏移（失败回退静态值）
 	static bool IsValidAddress(uintptr_t address) noexcept { return IsReady() && address != 0; }
 	static MemoryBackend& Memory() noexcept;
@@ -106,7 +109,6 @@ public:
 	static int NetworkTimeDeepProbe();
 
 private: /* Private functions */
-	static bool UpdateEssentials();
 };
 
 

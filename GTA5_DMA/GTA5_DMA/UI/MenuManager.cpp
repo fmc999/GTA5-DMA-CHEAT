@@ -1470,6 +1470,24 @@ void MenuManager::RenderSettingsPageContent()
 
     {
         layout2.Place(1);
+        // 第32轮（安全网）：一键关停所有写入类开关，并把游戏里的对应位清零
+        {
+            ConsoleTheme::BoxBegin("settings_killswitch", 2, "安全", layout2.width);
+            if (ConsoleTheme::ButtonRow("全部关停（并清零游戏内存）", UiIcon::Close, false, true))
+            {
+                GodMode::bPlayerGodMode.store(false);
+                GodMode::bVehicleGodMode.store(false);
+                GodMode::PlayerSet(false);
+                if (DMA::VehicleAddress)
+                    GodMode::VehicleSet(false);
+                PhoneSilencer::SetEnabled(false);
+                UiToast::Show("已关停全部写入类开关，并清零无敌位", ToastKind::Success);
+            }
+            ConsoleTheme::TextRow("说明", "误触开关后按这里：会同时清掉游戏内存里已写入的值", false);
+            ConsoleTheme::BoxEnd();
+            ImGui::Dummy(ImVec2(0.0f, 4.0f));
+        }
+
         ConsoleTheme::BoxBegin("settings_layout", 1, "界面", layout2.width);
         bool collapsed = WindowState::SidebarCollapsed;
         if (ConsoleTheme::ToggleRow("sidebar_collapsed", "收起侧边栏", "仅保留图标，扩大工作区", &collapsed, false))

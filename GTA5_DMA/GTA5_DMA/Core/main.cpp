@@ -6,6 +6,7 @@
 #include "MyImGui.h"
 #include "BanCheck.h"
 #include "PhoneSilencer.h"
+#include "GodMode.h"
 #include "AppRuntime.h"
 #include "InputManager.h"
 #include "DMA.h"
@@ -58,6 +59,49 @@ int main(int argc, char** argv)
 	}
 
 	// 游戏时钟实测（--clock-probe）
+	// 一键关停写入类开关（--all-off / --god-off）：把无敌相关的写入位清零并读回
+	if (argc > 1 && (std::string(argv[1]) == "--all-off" || std::string(argv[1]) == "--god-off"))
+	{
+		if (!DMA::Initialize())
+		{
+			std::printf("DMA 初始化失败\n");
+			return 1;
+		}
+		DMA::UpdateEssentials();
+		std::printf("[off] 本地玩家 ped=0x%llX 载具=0x%llX\n",
+			static_cast<unsigned long long>(DMA::LocalPlayerAddress),
+			static_cast<unsigned long long>(DMA::VehicleAddress));
+		GodMode::bPlayerGodMode.store(false);
+		GodMode::bVehicleGodMode.store(false);
+		const bool okP = GodMode::PlayerSet(false);
+		std::printf("[off] 玩家无敌清零：%s\n", okP ? "已写入" : "写入失败/不在玩家");
+		if (DMA::VehicleAddress)
+		{
+			const bool okV = GodMode::VehicleSet(false);
+			std::printf("[off] 载具无敌清零：%s\n", okV ? "已写入" : "写入失败");
+		}
+		else
+		{
+			std::printf("[off] 当前不在载具里，跳过载具无敌\n");
+		}
+		// 读回校验：玩家 god bits（bit4 + bit8）应为 0
+		{
+			uint32_t bits = 0xFFFFFFFFu;
+			const uintptr_t addr = DMA::LocalPlayerAddress + offsetof(PED, GodFlags);
+			if (DMA::LocalPlayerAddress && DMA::Memory().Read(addr, &bits, sizeof(bits)))
+			{
+				const bool god = ((bits >> 4) & 1u) != 0 && ((bits >> 8) & 1u) != 0;
+				std::printf("[off] 读回校验：GodFlags=0x%08X → 无敌位 %s\n", bits, god ? "仍为开 ✗" : "已关 ✓");
+			}
+			else
+			{
+				std::printf("[off] 读回失败（读不到玩家）\n");
+			}
+		}
+		DMA::Close();
+		return 0;
+	}
+
 	// 静音来电探针（--phone-probe）：打印 4 个脚本全局的地址与当前值
 	if (argc > 1 && std::string(argv[1]) == "--phone-probe")
 	{
