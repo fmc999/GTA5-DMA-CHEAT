@@ -54,3 +54,6 @@ _uiwork/
 GTA5_DMA/x64/Release/GTA5_DMA_tunables.txt
 GTA5_DMA/x64/Release/GTA5_DMA_patterns.txt
 GTA5_DMA/x64/Release/GTA5_DMA_diag.txt
+
+# 发布包（不纳入版本控制，由 Release 上传）
+GTA5-DMA-v*-win-x64.zip
