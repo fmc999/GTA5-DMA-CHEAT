@@ -1,5 +1,7 @@
 #include "OffsetResolver.h"
 
+#include "RuntimeTables.h"
+
 #include "PatternScanner.h"
 
 #include <Windows.h>
@@ -21,8 +23,16 @@ namespace
         // DMA dumper（同游戏版本 + 同设备实测解析成功，值为 0x434A958 等）。
         {"WorldPtr", "48 8B 0D ?? ?? ?? ?? 48 85 C9 74 ?? 48 8B 49 ?? 48 8D", 3, 7,
             1, {"48 8B 3D ? ? ? ? 49 8B B6"}},
-        {"GlobalPtr", "48 8D 3D ?? ?? ?? ?? 31 DB 48 8D 2D ?? ?? ?? ?? 4C", 3, 7,
-            1, {"48 8B 0D ? ? ? ? 0F 1F 44 00"}},
+        // GlobalPtr 的备用特征码 "48 8B 0D ? ? ? ? 0F 1F 44 00" 是**老版 GTA5.exe** 的签名
+        // （见 Offsets.h：GlobalPtr_Original 0x2FA8550 的注释就是这条签名）。在 Enhanced 上
+        // 它会算出「看着像 64 分块表、其实全是垃圾」的地址 —— 实机 2026-09-17 同一进程里，
+        // 主特征码偶发失配后回退到它，GlobalPtr 变成 0x4737178（13 个非 0 分块里 4 个不可读），
+        // 依赖脚本全局的功能（如防挂机踢出）随之失效。因此不再提供备用特征码：主特征码
+        // （YimMenuV2 ScriptGlobals，disp=10/insn=14）失配时直接回退静态表
+        // GlobalPtr_Enhanced（= 0x3ED15A8，与 YimMenuV2 解析结果一致），并由 CandidateValidator
+        // 的「64 分块表体检」兜底。
+        {"GlobalPtr", "48 8B 8E ?? ?? ?? ?? 48 8D 15 ?? ?? ?? ?? 49 89 D8", 10, 14,
+            0, {}},
         {"BlipPtr", "48 8D 0D ? ? ? ? 41 B8 ? ? ? ? 31 D2 E8 ? ? ? ? 8B 0D", 3, 7,
             1, {"4C 8D 3D ? ? ? ? 49 8B 34 C7"}},
         {"PlayerMgrPtr", "75 0E 48 8B 05 ? ? ? ? 48 8B 88 F0 00 00 00", 5, 9},
@@ -55,53 +65,132 @@ namespace OffsetResolver
         std::uintptr_t sectionRuntimeAddress,
         std::uintptr_t moduleBase,
         std::uint32_t imageSize,
-        std::uintptr_t fallback)
+        std::uintptr_t fallback,
+        const CandidateValidator& validator)
     {
-        const auto fallbackResult = [&spec, fallback](std::string diagnostic) {
-            return ResolvedOffset{
-                std::string(spec.name),
-                fallback,
-                OffsetSource::Fallback,
-                std::move(diagnostic)
-            };
+        std::string attempts;
+        std::vector<std::uintptr_t> observedCandidates;   // 全部候选（含被拒绝的），落进 fallback 诊断
+        const auto note = [&attempts](std::string line) {
+            if (!attempts.empty())
+                attempts += " | ";
+            attempts += std::move(line);
         };
 
-        PatternScanner::ScanResult match = PatternScanner::FindUnique(bytes, spec.pattern);
-        if (match.status != PatternScanner::ScanStatus::Found)
-        {
-            // 主特征码未命中：按序尝试备用特征码
-            for (std::size_t i = 0; i < spec.alternativeCount && i < SignatureSpec::kMaxAlternatives; ++i)
+        const auto inImage = [moduleBase, imageSize](std::uintptr_t target) {
+            return moduleBase != 0 && imageSize != 0 && target >= moduleBase &&
+                   target - moduleBase < imageSize;
+        };
+
+        // 按序尝试：主特征码 → 每条备用特征码（各自带 rel32 位移/指令长度）。
+        // 命中 0 次 / 候选越界 / 候选未通过校验器 —— 三种情况都记进诊断再继续下一个。
+        const auto tryPattern = [&](std::string_view pattern,
+                                    std::size_t displacementOffset,
+                                    std::size_t instructionSize,
+                                    const char* tag) -> std::optional<ResolvedOffset> {
+            const PatternScanner::FindAllResult scan = PatternScanner::FindAll(bytes, pattern);
+            if (scan.status != PatternScanner::ScanStatus::Found)
             {
-                match = PatternScanner::FindUnique(bytes, spec.alternativePatterns[i]);
-                if (match.status == PatternScanner::ScanStatus::Found)
-                    break;
+                note(std::string(tag) + ": " + scan.diagnostic);
+                return std::nullopt;
+            }
+
+            std::string rejections;
+            std::size_t inImageCount = 0;
+
+            for (const std::size_t offset : scan.offsets)
+            {
+                const auto target = PatternScanner::ResolveRelativeTarget(
+                    bytes, offset, displacementOffset, instructionSize, sectionRuntimeAddress);
+                if (!target)
+                    continue;
+
+                observedCandidates.push_back(*target);
+                if (!inImage(*target))
+                    continue;
+                ++inImageCount;
+
+                if (validator)
+                {
+                    std::string reason;
+                    if (!validator(*target, &reason))
+                    {
+                        if (!reason.empty())
+                        {
+                            if (!rejections.empty())
+                                rejections += "; ";
+                            rejections += reason;
+                        }
+                        continue;
+                    }
+                }
+                else if (scan.offsets.size() > 1)
+                {
+                    // 没有校验器时保持旧的「唯一命中」语义：多命中不接受。
+                    continue;
+                }
+
+                return ResolvedOffset{
+                    std::string(spec.name),
+                    *target - moduleBase,
+                    OffsetSource::Pattern,
+                    {},
+                    observedCandidates,
+                    validator ? true : false
+                };
+            }
+
+            std::string line = std::string(tag) + ": " + std::to_string(scan.offsets.size()) +
+                               " hit(s), " + std::to_string(inImageCount) + " in-image, 未采纳";
+            if (!rejections.empty())
+                line += "（" + rejections + "）";
+            note(std::move(line));
+            return std::nullopt;
+        };
+
+        if (auto hit = tryPattern(spec.pattern, spec.displacementOffset, spec.instructionSize, "primary"))
+            return *hit;
+
+        for (std::size_t i = 0; i < spec.alternativeCount && i < SignatureSpec::kMaxAlternatives; ++i)
+        {
+            if (spec.alternativePatterns[i].empty())
+                continue;
+
+            const std::size_t displacementOffset = spec.alternativeDisplacementOffset[i] != 0
+                ? spec.alternativeDisplacementOffset[i] : spec.displacementOffset;
+            const std::size_t instructionSize = spec.alternativeInstructionSize[i] != 0
+                ? spec.alternativeInstructionSize[i] : spec.instructionSize;
+
+            if (auto hit = tryPattern(spec.alternativePatterns[i], displacementOffset, instructionSize, "alternative"))
+                return *hit;
+        }
+
+        // 第19轮：外部文件追加候选（GTA5_DMA_patterns.txt）。
+        // 游戏大版本更新、内置候选全部失配时，往那个文件里贴一行新特征码就能继续用 —— 不需要重新编译。
+        {
+            RuntimeTables::PatternOverride overrides[4]{};
+            const std::uint32_t overrideCount =
+                RuntimeTables::GetPatternOverrides(std::string(spec.name).c_str(), overrides, 4);
+            for (std::uint32_t i = 0; i < overrideCount; ++i)
+            {
+                if (overrides[i].pattern.empty())
+                    continue;
+
+                const std::size_t displacementOffset = overrides[i].hasLayout
+                    ? overrides[i].displacementOffset : spec.displacementOffset;
+                const std::size_t instructionSize = overrides[i].hasLayout
+                    ? overrides[i].instructionSize : spec.instructionSize;
+
+                if (auto hit = tryPattern(overrides[i].pattern, displacementOffset, instructionSize, "external"))
+                    return *hit;
             }
         }
-        if (match.status != PatternScanner::ScanStatus::Found)
-        {
-            return fallbackResult("Pattern scan failed for " + std::string(spec.name) + ".");
-        }
 
-        const auto target = PatternScanner::ResolveRelativeTarget(
-            bytes,
-            match.offset,
-            spec.displacementOffset,
-            spec.instructionSize,
-            sectionRuntimeAddress);
-        if (!target)
-        {
-            return fallbackResult("RIP-relative target could not be resolved for " + std::string(spec.name) + ".");
-        }
-
-        if (moduleBase == 0 || imageSize == 0 || *target < moduleBase ||
-            *target - moduleBase >= imageSize)
-        {
-            return fallbackResult("Resolved target is outside the module image for " + std::string(spec.name) + ".");
-        }
-
-        return {std::string(spec.name), *target - moduleBase, OffsetSource::Pattern, {}};
+        ResolvedOffset out{std::string(spec.name), fallback, OffsetSource::Fallback, {}};
+        out.candidates = std::move(observedCandidates);
+        out.diagnostic = "no usable candidate for " + std::string(spec.name) + " — " +
+                         (attempts.empty() ? std::string("pattern scan produced no match") : attempts);
+        return out;
     }
-
     std::optional<ExecutableSection> LoadExecutableSection(
         const MemoryReader& reader,
         std::uintptr_t moduleBase,

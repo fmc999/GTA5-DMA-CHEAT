@@ -208,6 +208,12 @@ bool MyImGui::Initialize()
     ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO();
     (void)io;
+    // 非开发者构建：关掉 Dear ImGui 的英文「程序员错误（ID 冲突）」弹窗。
+    // 真实 ID 冲突已由 tests/UiLabelContractTests.ps1 守住（循环里做行控件必须 PushID），
+    // 这里只是不让用户被英文调试弹窗打扰。
+#if defined(IMGUI_VERSION_NUM) && IMGUI_VERSION_NUM >= 19100
+    io.ConfigDebugHighlightIdConflicts = false;
+#endif
     // 注：不启用 NavEnableKeyboard，避免占用全局按键（热键需要穿透）
 
     // 字体：小号 + 常规 + 粗体 + 大标题 + 字标

@@ -23,7 +23,7 @@ public: /* Interface variables */
 
 	// 构建标记：载具页「战局载具」区常显，用来确认正在跑的 exe 是不是最新修复版
 	// （实机排查"点传送到它却像把车拉过来"时，先看面板上这一串）。
-	static constexpr const char* BuildTag = "v2.5-dirfix";
+	static constexpr const char* BuildTag = "v3.2-ui-layout";
 
 public: /* DMA Interface function */
 	static bool IsReady() noexcept { return vmh != 0 && PID != 0; }
@@ -34,6 +34,7 @@ public: /* DMA Interface function */
 	static bool DMAThreadEntry();
 	static bool UpdatePlayerCurrentLocation();
 	static bool UpdateVehicleInformation();
+	static bool Close();  // 显式关闭：还原 tunable / 断开设备（自检模式与正常退出共用）
 
 public: /* Globals */
 	static uintptr_t GetGlobalAddress(DWORD Index);
@@ -102,7 +103,6 @@ public: /* Globals */
 
 private: /* Private functions */
 	static bool UpdateEssentials();
-	static bool Close();
 };
 
 

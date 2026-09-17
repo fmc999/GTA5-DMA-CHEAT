@@ -14,11 +14,20 @@
 #include "NoWanted.h"
 #include "PlayerList.h"
 #include "VehicleList.h"
+#include "VehicleRepair.h"
 #include "PlayerSpeed.h"
 #include "RefreshHealth.h"
 #include "Teleport.h"
 #include "VehicleEditor.h"
 #include "WeaponInspector.h"
+#include "AimAid.h"
+#include "NoIdleKick.h"
+#include "Tunables.h"
+#include "ProgressFeatures.h"
+#include "EconomyFeatures.h"
+#include "Diagnostics.h"
+#include "ScriptGlobals.h"
+#include "ScriptThreads.h"
 
 #include "DMA.h"
 #include "UiToast.h"
@@ -134,7 +143,7 @@ void MenuManager::RenderPlayerPageContent()
     // 1) 防护：持续保护开关
     {
         layout2.Place(0);
-        ConsoleTheme::BoxBegin("player_protection", 4, "防护", layout2.width);
+        ConsoleTheme::BoxBegin("player_protection", 5, "防护", layout2.width);
 
         bool playerGodMode = GodMode::bPlayerGodMode.load();
         if (ConsoleTheme::ToggleRow("player_god", "玩家无敌", "保护人物生命与伤害状态", &playerGodMode)) {
@@ -150,11 +159,18 @@ void MenuManager::RenderPlayerPageContent()
 
         ConsoleTheme::ToggleRow("no_wanted", "永不被通缉", "阻止通缉等级持续增加", &NoWanted::bEnable, false);
 
+        bool noIdleKick = NoIdleKick::bEnable.load();
+        if (ConsoleTheme::ToggleRow("no_idle_kick", "防止挂机踢出",
+                                    "在线模式中将空闲和受限踢出计时延长至上限", &noIdleKick))
+        {
+            NoIdleKick::bEnable.store(noIdleKick);
+        }
+
         // 布娃娃由 DMA 线程固定写入（Ragdoll::OnDMAFrame 内硬编码为禁用），
         // 这里只做状态展示，不做成开关，避免给出"可以关掉"的假象。
         ConsoleTheme::TextRow("无布娃娃", "已固定启用", true, false);
         ConsoleTheme::BoxEnd();
-        layout2.Advance(0, TitledBoxHeight(4));
+        layout2.Advance(0, TitledBoxHeight(5));
     }
 
     // 2) 恢复与锁定：开关与其参数（阈值）同盒，数值锁定紧随其后
@@ -339,6 +355,58 @@ void MenuManager::RenderVehiclePageContent()
     ImGui::Dummy(ImVec2(0.0f, 10.0f));
 
     VehicleEditor::RenderContent();
+
+    // ---- 载具修复（参考 YimMenuV2 Fix / FixAllVehicles，纯 DMA 写健康值）----
+    ImGui::Dummy(ImVec2(0.0f, 12.0f));
+    ConsoleTheme::SectionHeader("载具修复", "DMA 直写四段健康值并逐字段读回校验");
+
+    {
+        const VehicleRepairReport repair = VehicleRepair::GetLastReport();
+        const std::vector<SessionVehicle> repairTargets = VehicleList::GetSnapshot();
+
+        ConsoleTheme::BoxBegin("veh_repair", 4, "修复", 0.0f);
+
+        bool autoRepair = VehicleRepair::bAutoRepair.load();
+        if (ConsoleTheme::ToggleRow("veh_auto_repair", "自动修复当前载具",
+                                    "血量低于 80% 时自动写满四段健康值", &autoRepair))
+        {
+            VehicleRepair::bAutoRepair.store(autoRepair);
+        }
+
+        if (ConsoleTheme::ButtonRow("修复当前载具", UiIcon::Heart, true))
+        {
+            VehicleRepair::RequestRepairCurrent();
+            UiToast::Show("已请求修复当前载具", ToastKind::Info);
+        }
+
+        char repairAllLabel[64] = {};
+        std::snprintf(repairAllLabel, sizeof(repairAllLabel), "一键修复战局载具（%d 辆）",
+                      static_cast<int>(repairTargets.size()));
+        if (ConsoleTheme::ButtonRow(repairAllLabel, UiIcon::Refresh))
+        {
+            VehicleRepair::RequestRepairAll();
+            char repairMsg[96] = {};
+            std::snprintf(repairMsg, sizeof(repairMsg), "已请求修复 %d 辆战局载具",
+                          static_cast<int>(repairTargets.size()));
+            UiToast::Show(repairMsg, ToastKind::Info);
+        }
+
+        char repairText[192] = {};
+        if (!repair.Sent)
+        {
+            std::snprintf(repairText, sizeof(repairText), "尚未执行");
+        }
+        else
+        {
+            std::snprintf(repairText, sizeof(repairText),
+                          "%s%s · 修复 %d/%d · 字段校验 %d/%d · 血量 %.0f → %.0f",
+                          repair.All ? "全部载具" : "当前载具", repair.Auto ? "（自动）" : "",
+                          repair.Fixed, repair.Requested, repair.VerifiedFields, repair.TotalFields,
+                          repair.HealthBefore, repair.HealthAfter);
+        }
+        ConsoleTheme::TextRow("最近一次", repairText, !repair.Sent || repair.Fixed > 0, false);
+        ConsoleTheme::BoxEnd();
+    }
 
     ImGui::Dummy(ImVec2(0.0f, 12.0f));
 
@@ -643,11 +711,17 @@ void MenuManager::RenderSessionPageContent()
 
     {
         detail.Place(1);
-        ConsoleTheme::BoxBegin("player_actions", 2, "对目标执行", detail.width);
+        ConsoleTheme::BoxBegin("player_actions", 3, "对目标执行", detail.width);
         if (ConsoleTheme::ButtonRow("传送到此玩家", UiIcon::Pin, true))
         {
             PlayerList::RequestTeleportTo(selected.PlayerIndex);
             UiToast::Show(std::string("传送 → ") + selected.Name, ToastKind::Success);
+        }
+        if (ConsoleTheme::ButtonRow("拉到我这里", UiIcon::Target))
+        {
+            // 目标 → 我（参考 YimMenuV2 Bring）：只写目标玩家的位置，落点在我旁边错开 2 米
+            PlayerList::RequestBring(selected.PlayerIndex);
+            UiToast::Show(std::string("拉到我这里 ← ") + selected.Name, ToastKind::Info);
         }
         if (ConsoleTheme::ButtonRow("击杀（血量清零）", UiIcon::Zap, false, true))
         {
@@ -655,13 +729,525 @@ void MenuManager::RenderSessionPageContent()
             UiToast::Show(std::string("已请求击杀 ") + selected.Name, ToastKind::Danger);
         }
         ConsoleTheme::BoxEnd();
+        detail.Advance(1, TitledBoxHeight(3));
+
+        detail.Place(1);
+        ConsoleTheme::BoxBegin("player_bring", 2, "最近一次拉人", detail.width);
+        const BringReport bring = PlayerList::GetLastBring();
+        char bringTarget[64] = {};
+        if (bring.Sent)
+            std::snprintf(bringTarget, sizeof(bringTarget), "%s",
+                          bring.Name[0] != '\0' ? bring.Name : "（未取到名字）");
+        else
+            std::snprintf(bringTarget, sizeof(bringTarget), "尚未执行");
+        ConsoleTheme::TextRow("目标", bringTarget, bring.Sent);
+        char bringResult[96] = {};
+        std::snprintf(bringResult, sizeof(bringResult), "落点 %.1f, %.1f, %.1f · 读回校验 %s",
+                      bring.Landed[0], bring.Landed[1], bring.Landed[2], bring.Ok ? "通过" : "未通过");
+        ConsoleTheme::TextRow("结果", bring.Sent ? bringResult : "-", bring.Ok, false);
+        ConsoleTheme::BoxEnd();
         detail.Advance(1, TitledBoxHeight(2));
 
         detail.Place(1);
-        ImGui::TextDisabled("传送会错开 2 米防卡模；击杀对无敌目标无效。");
+        ImGui::TextDisabled("传送 / 拉人都错开 2 米防卡模；击杀对无敌目标无效。");
     }
 
     detail.End();
+}
+
+/* ---------- 自瞄 ---------- */
+
+void MenuManager::RenderAimPageContent()
+{
+    // 本页只保留「自瞄」本身：用 DMA 直接改写游戏里辅助瞄准的四处判定代码
+    // （参考 YimMenuV2 Aimbot 的字节补丁，改成纯 DMA 写入，无注入 / 无远程线程）。
+    // 补丁点由 AimAid::Resolve() 在启动时按特征码定位；任一失败则该条保持禁用，
+    // 绝不在未解析的地址上盲写。
+    TwoColumn col;
+    col.Begin();
+
+    /* ================== 左列：自瞄开关 ================== */
+
+    // 1) 自瞄
+    {
+        col.Place(0);
+        ConsoleTheme::BoxBegin("aim_main", 3, "自瞄", col.width);
+
+        bool assisted = AimAid::bAssistedAim.load();
+        if (ConsoleTheme::ToggleRow("aim_assisted", "辅助瞄准增强",
+                                    "解锁目标排除 + 锁定辅助瞄准类型", &assisted, true))
+        {
+            AimAid::bAssistedAim.store(assisted);
+        }
+
+        bool head = AimAid::bAimForHead.load();
+        if (ConsoleTheme::ToggleRow("aim_head", "锁定头部",
+                                    "瞄准点直接取头部（爆头）", &head, true))
+        {
+            AimAid::bAimForHead.store(head);
+        }
+
+        bool driver = AimAid::bDriverLockOn.load();
+        if (ConsoleTheme::ToggleRow("aim_driver", "驾驶员锁定",
+                                    "允许对载具驾驶员锁定", &driver, false))
+        {
+            AimAid::bDriverLockOn.store(driver);
+        }
+        ConsoleTheme::BoxEnd();
+        col.Advance(0, TitledBoxHeight(3));
+    }
+
+    /* ================== 右列：补丁点状态 ================== */
+
+    // 2) 补丁点解析（自检：四处特征码是否都定位到了、是否已生效）
+    {
+        col.Place(1);
+        ConsoleTheme::BoxBegin("aim_patch", 6, "补丁点状态", col.width);
+
+        char resolvedText[32] = {};
+        std::snprintf(resolvedText, sizeof(resolvedText), "%d / 4", AimAid::GetResolvedCount());
+        ConsoleTheme::TextRow("已定位", resolvedText, AimAid::GetResolvedCount() == 4, true);
+
+        // 逐条列出生效状态与补丁地址
+        const AimAid::PatchId ids[4] = {
+            AimAid::PatchId::ShouldNotTarget,
+            AimAid::PatchId::AssistedAimType,
+            AimAid::PatchId::LockOnPos,
+            AimAid::PatchId::DriverLockOn,
+        };
+        const char* names[4] = { "目标排除 A", "瞄准类型 B", "锁定头部 C", "驾驶员 D" };
+        for (int i = 0; i < 4; ++i)
+        {
+            const bool res = AimAid::IsResolved(ids[i]);
+            const bool app = AimAid::IsApplied(ids[i]);
+            char buf[56] = {};
+            if (!res)
+                std::snprintf(buf, sizeof(buf), "未定位");
+            else
+                std::snprintf(buf, sizeof(buf), "%s 0x%llX", app ? "已生效" : "待命",
+                              static_cast<unsigned long long>(AimAid::GetSite(ids[i])));
+            ConsoleTheme::TextRow(names[i], buf, res, i < 3);
+        }
+
+        // 写入争用：被其它工具立刻覆盖的次数（>0 说明该补丁点在和别人抢）
+        const int contend = AimAid::GetContentionCount(AimAid::PatchId::ShouldNotTarget)
+                          + AimAid::GetContentionCount(AimAid::PatchId::AssistedAimType)
+                          + AimAid::GetContentionCount(AimAid::PatchId::LockOnPos)
+                          + AimAid::GetContentionCount(AimAid::PatchId::DriverLockOn);
+        char cText[48] = {};
+        if (contend == 0)
+            std::snprintf(cText, sizeof(cText), "无");
+        else
+            std::snprintf(cText, sizeof(cText), "被覆盖 %d 次", contend);
+        ConsoleTheme::TextRow("写入争用", cText, contend == 0, false);
+        ConsoleTheme::BoxEnd();
+        col.Advance(1, TitledBoxHeight(6));
+    }
+
+    // 3) 写入通道
+    {
+        col.Place(1);
+        ConsoleTheme::BoxBegin("aim_link", 3, "写入通道", col.width);
+        ConsoleTheme::TextRow("游戏进程", DMA::IsReady() ? "已连接" : "未连接", DMA::IsReady(), true);
+        ConsoleTheme::TextRow("写入方式", "DMA 直写 .text（绕过页保护）", true, true);
+        ConsoleTheme::TextRow("还原方式", "关闭开关即写回原始字节", true, false);
+        ConsoleTheme::BoxEnd();
+        col.Advance(1, TitledBoxHeight(3));
+    }
+
+    col.End();
+}
+
+/* ---------- 进度与解锁（tunable）---------- */
+
+void MenuManager::RenderProgressPageContent()
+{
+    // 本页所有开关都写脚本 tunable（纯 DMA 写脚本全局单元），
+    // 索引由 Tunables 的值锚动态定位 + 默认值体检给出；页面右侧常显实读值，便于一眼核对。
+    TwoColumn col;
+    col.Begin();
+
+    /* ================== 左列：功能开关 ================== */
+
+    {
+        col.Place(0);
+        ConsoleTheme::BoxBegin("prog_recovery", 4, "进度与解锁", col.width);
+
+        bool rp = ProgressFeatures::bRpMultiplier.load();
+        if (ConsoleTheme::ToggleRow("rp_multiplier", "RP 倍率",
+                                    "写 tunable XP_MULTIPLIER（游戏刷新 tunables 后自动重写）", &rp, true))
+        {
+            ProgressFeatures::bRpMultiplier.store(rp);
+        }
+
+        float rpv = ProgressFeatures::rpMultiplier.load();
+        if (ConsoleTheme::SliderRow("rp_multiplier_value", "倍率", &rpv, 0.5f, 10.0f, "%.2f x", true))
+        {
+            ProgressFeatures::rpMultiplier.store(rpv);
+        }
+
+        bool freeAppearance = ProgressFeatures::bFreeAppearance.load();
+        if (ConsoleTheme::ToggleRow("free_appearance", "改外貌免费",
+                                    "写 tunable CHARACTER_APPEARANCE_CHARGE = 0", &freeAppearance, true))
+        {
+            ProgressFeatures::bFreeAppearance.store(freeAppearance);
+        }
+
+        bool noCooldown = ProgressFeatures::bNoAppearanceCooldown.load();
+        if (ConsoleTheme::ToggleRow("no_appearance_cooldown", "改外貌免冷却",
+                                    "写 tunable CHARACTER_APPEARANCE_COOLDOWN = 0", &noCooldown, false))
+        {
+            ProgressFeatures::bNoAppearanceCooldown.store(noCooldown);
+        }
+        ConsoleTheme::BoxEnd();
+        col.Advance(0, TitledBoxHeight(4));
+    }
+
+    {
+        // 第18轮：金额/额度类（抢劫收益、挑战奖励）。这些 tunable 没有固定默认值，
+        // 用「倍率 × 解析时记录的原值」写入，clamp 到登记表区间；关闭即写回原值。
+        // 高度必须按**实际内容行数**算：总开关 + 滑杆 + 每条 1 行。
+        // 之前这里写死 12、而内容是 9 条 × 2 行 = 20 行 → 溢出框外压住下一个框（用户看到的"错位乱套"）。
+        const int valueRows = 2 + static_cast<int>(ProgressFeatures::kValueSlotCount);
+        col.Place(0);
+        ConsoleTheme::BoxBegin("prog_value", valueRows, "抢劫与经济价值（金额类）", col.width);
+
+        bool master = ProgressFeatures::bValueMultiplier.load();
+        if (ConsoleTheme::ToggleRow("value_master", "启用金额倍率",
+                                    "对下面勾选的条目写入「原值 × 倍率」，关闭后写回原值", &master, true))
+            ProgressFeatures::bValueMultiplier.store(master);
+
+        float mult = ProgressFeatures::valueMultiplier.load();
+        if (ConsoleTheme::SliderRow("value_mult", "倍率", &mult, 1.0f, 10.0f, "%.1f x", true))
+            ProgressFeatures::valueMultiplier.store(mult);
+
+        for (uint32_t i = 0; i < ProgressFeatures::kValueSlotCount; ++i)
+        {
+            const char* label = ProgressFeatures::GetValueSlotLabel(i);
+            const char* rawName = ProgressFeatures::GetValueSlotName(i);
+            if (!rawName || rawName[0] == '?')
+                continue;
+
+            // 每个槽位一个独立 ID 作用域：内部控件自动互不冲突
+            // （之前 9 行都用同一个 "   实读" 标签 → ImGui 报 "5 visible items with conflicting ID"）。
+            ImGui::PushID(static_cast<int>(i));
+
+            bool on = ProgressFeatures::valueSlotEnabled[i].load();
+            bool ok = false;
+            const int32_t live = ProgressFeatures::GetValueSlotLive(i, &ok);
+            const int32_t original = ProgressFeatures::GetValueSlotOriginal(i);
+
+            // 一条只占一行：数值状态放进描述文字，避免框高失控
+            char desc[160] = {};
+            std::snprintf(desc, sizeof(desc), "%s值 %s → %s", ok ? "原" : "读失败·原",
+                          original > 0 ? std::to_string(original).c_str() : "—",
+                          ok ? std::to_string(live).c_str() : "—");
+            if (ConsoleTheme::ToggleRow("slot", label ? label : rawName, desc, &on, true))
+                ProgressFeatures::valueSlotEnabled[i].store(on);
+
+            ImGui::PopID();
+        }
+        ConsoleTheme::BoxEnd();
+        col.Advance(0, TitledBoxHeight(valueRows));
+    }
+
+    {
+        const ProgressFeatures::Report report = ProgressFeatures::GetReport();
+        col.Place(0);
+        ConsoleTheme::BoxBegin("prog_state", 4, "生效状态", col.width);
+
+        char slots[64] = {};
+        // 分母写全量（进度页关心的是 20 条 tunable + 3 个进度开关），别再写死 3 让人以为是坏的
+        std::snprintf(slots, sizeof(slots), "%d / %d", ProgressFeatures::GetResolvedCount(), 3);
+        ConsoleTheme::TextRow("进度开关已定位", slots, ProgressFeatures::GetResolvedCount() == 3, true);
+
+        int valueReady = 0;
+        for (uint32_t i = 0; i < ProgressFeatures::kValueSlotCount; ++i)
+        {
+            const char* rawName = ProgressFeatures::GetValueSlotName(i);
+            if (rawName && rawName[0] != '?')
+                ++valueReady;
+        }
+        char values[64] = {};
+        std::snprintf(values, sizeof(values), "%d / %d 条可用", valueReady,
+                      static_cast<int>(ProgressFeatures::kValueSlotCount));
+        ConsoleTheme::TextRow("金额条目", values, valueReady == static_cast<int>(ProgressFeatures::kValueSlotCount), true);
+
+        char applied[48] = {};
+        std::snprintf(applied, sizeof(applied), "%d 项已写入", report.appliedSlots);
+        ConsoleTheme::TextRow("本轮写入", applied, report.appliedSlots > 0, true);
+
+        char blocked[48] = {};
+        std::snprintf(blocked, sizeof(blocked), "%d 次被拒/被覆盖", report.blockedWrites);
+        ConsoleTheme::TextRow("写入争用", blocked, report.blockedWrites == 0, false);
+        ConsoleTheme::BoxEnd();
+        col.Advance(0, TitledBoxHeight(4));
+    }
+
+    /* ================== 右列：tunable 自检表 ================== */
+
+    {
+        col.Place(1);
+        ConsoleTheme::BoxBeginPixels("prog_selftest", 420.0f, "tunable 自检", col.width);
+
+        char anchor[64] = {};
+        std::snprintf(anchor, sizeof(anchor), "element %d", Tunables::GetAnchorElement());
+        ConsoleTheme::TextRow("值锚位置", anchor, Tunables::GetAnchorElement() >= 0, true);
+
+        const ImGuiTableFlags flags = ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV |
+                                      ImGuiTableFlags_ScrollY | ImGuiTableFlags_SizingStretchProp;
+        if (ImGui::BeginTable("##tunable_selftest", 4, flags, ImVec2(0.0f, 330.0f)))
+        {
+            ImGui::TableSetupScrollFreeze(0, 1);
+            // 列宽自适应框宽：之前 4 列固定宽度合计 450px > 右栏框宽 → 最后一列被截成「状」。
+            ImGui::TableSetupColumn("功能", ImGuiTableColumnFlags_WidthStretch, 1.60f);
+            ImGui::TableSetupColumn("索引", ImGuiTableColumnFlags_WidthFixed, 66.0f);
+            ImGui::TableSetupColumn("实读值", ImGuiTableColumnFlags_WidthFixed, 84.0f);
+            ImGui::TableSetupColumn("定位", ImGuiTableColumnFlags_WidthStretch, 0.90f);
+            ImGui::TableHeadersRow();
+
+            for (uint32_t i = 0; i < Tunables::kSlotCount; ++i)
+            {
+                ImGui::TableNextRow();
+                ImGui::PushID(static_cast<int>(i));
+
+                ImGui::TableNextColumn();
+                {
+                    const char* rawName = Tunables::GetEntryName(i);
+                    const char* label = Tunables::GetEntryLabel(i);
+                    ImGui::TextUnformatted((label && label[0] && label[0] != '?') ? label : rawName);
+                    if (ImGui::IsItemHovered())
+                        ImGui::SetTooltip("%s", rawName);
+                }
+
+                ImGui::TableNextColumn();
+                ImGui::Text("0x%X", Tunables::GetGlobalIndex(i));
+
+                ImGui::TableNextColumn();
+                bool ok = false;
+                const int32_t live = Tunables::ReadLive(i, &ok);
+                if (!ok)
+                {
+                    ImGui::TextDisabled("-");
+                }
+                else
+                {
+                    const bool isFloat = std::strstr(Tunables::GetEntryName(i), "XP_MULTIPLIER") != nullptr;
+                    if (isFloat)
+                    {
+                        float f = 0.0f;
+                        std::memcpy(&f, &live, sizeof(f));
+                        ImGui::Text("%.2f", f);
+                    }
+                    else
+                    {
+                        ImGui::Text("%d", live);
+                    }
+                }
+
+                ImGui::TableNextColumn();
+                if (Tunables::IsResolved(i))
+                    ImGui::TextColored(ConsoleTheme::Success(), "%s", Tunables::GetLocatedBy(i));
+                else
+                    ImGui::TextColored(ConsoleTheme::Danger(), "未定位");
+
+                ImGui::PopID();
+            }
+            ImGui::EndTable();
+        }
+        ConsoleTheme::BoxEnd();
+        col.Advance(1, TitledBoxPixels(420.0f));
+    }
+
+    {
+        col.Place(1);
+        ConsoleTheme::BoxBegin("prog_note", 3, "说明", col.width);
+        ConsoleTheme::TextRow("写入方式", "DMA 直写脚本全局单元", true, true);
+        ConsoleTheme::TextRow("定位方式", "四连组校验 / 候选绝对位置（单值邻域搜索已移除）", true, true);
+        ConsoleTheme::TextRow("安全阀", "当前值必须等于默认值才允许写", true, false);
+        ConsoleTheme::BoxEnd();
+        col.Advance(1, TitledBoxHeight(3));
+    }
+
+    col.End();
+}
+
+/* ---------- 经济与自动化（第17轮）---------- */
+
+void MenuManager::RenderEconomyPageContent()
+{
+    // 本页动作全部写「脚本全局动作格」：先体检（值必须落在登记表的合法区间内）再写，写完读回校验。
+    // 保险箱领取是脉冲写（写 1，1.5 秒后自动还原），所以按钮点一下就够，不需要一直开着。
+    TwoColumn col;
+    col.Begin();
+
+    /* ================== 左列：动作 ================== */
+
+    {
+        col.Place(0);
+        ConsoleTheme::BoxBegin("eco_auto", 4, "自动动作", col.width);
+
+        bool autoClaim = EconomyFeatures::bAutoClaimSafeEarnings.load();
+        if (ConsoleTheme::ToggleRow("eco_auto_claim", "自动领取保险箱",
+                                    "周期触发 7 个产业的保险箱动作格（游戏自己判断有没有钱）", &autoClaim, true))
+            EconomyFeatures::bAutoClaimSafeEarnings.store(autoClaim);
+
+        float interval = static_cast<float>(EconomyFeatures::claimIntervalSeconds.load());
+        if (ConsoleTheme::SliderRow("eco_auto_claim_interval", "领取间隔", &interval, 5.0f, 120.0f, "%.0f 秒", true))
+            EconomyFeatures::claimIntervalSeconds.store(static_cast<int>(interval));
+
+        bool autoSilence = EconomyFeatures::bAutoSilenceCalls.load();
+        if (ConsoleTheme::ToggleRow("eco_auto_silence", "自动静音来电",
+                                    "读 状态/通话中/来电 三个格，条件成立就把状态写成 6", &autoSilence, true))
+            EconomyFeatures::bAutoSilenceCalls.store(autoSilence);
+
+        bool gtaPlus = EconomyFeatures::bUnlockGTAPlus.load();
+        if (ConsoleTheme::ToggleRow("eco_gta_plus", "GTA+ 解锁",
+                                    "写 GTA_PLUS_ENABLED / 权益位 + 引擎标志（关闭时还原）", &gtaPlus, false))
+        {
+            EconomyFeatures::bUnlockGTAPlus.store(gtaPlus);
+            EconomyFeatures::SetGTAPlus(gtaPlus);
+        }
+        ConsoleTheme::BoxEnd();
+        col.Advance(0, TitledBoxHeight(4));
+    }
+
+    {
+        col.Place(0);
+        ConsoleTheme::BoxBegin("eco_safe", 8, "产业保险箱（一键领取）", col.width);
+
+        if (ConsoleTheme::ButtonRow("一键领取全部产业", UiIcon::Refresh, true))
+            EconomyFeatures::ClaimAllSafes();
+
+        for (uint32_t i = 0; i < static_cast<uint32_t>(EconomyFeatures::kSafeCount); ++i)
+        {
+            char label[64] = {};
+            std::snprintf(label, sizeof(label), "%s", EconomyFeatures::GetBusinessName(i));
+            const bool ready = EconomyFeatures::IsBusinessReady(i);
+            if (ConsoleTheme::ButtonRow(label, UiIcon::Save, false, false))
+                EconomyFeatures::ClaimSafe(i);
+            if (!ready)
+                ImGui::TextDisabled("    (未定位：全局索引 0x%X 不在合法值区间内，已跳过)",
+                                    EconomyFeatures::GetBusinessGlobalIndex(i));
+        }
+        ConsoleTheme::BoxEnd();
+        col.Advance(0, TitledBoxHeight(8));
+    }
+
+    {
+        col.Place(0);
+        ConsoleTheme::BoxBegin("eco_state", 4, "状态", col.width);
+        ConsoleTheme::TextRow("动作计数", EconomyFeatures::GetStatusLine(), true, true);
+        ConsoleTheme::TextRow("最近动作", EconomyFeatures::GetLastAction(), true, true);
+
+        char gp[64] = {};
+        const int gpAddr = EconomyFeatures::GetGtaPlusFlagAddress();
+        if (gpAddr)
+            std::snprintf(gp, sizeof(gp), "已定位 @ 0x%X", static_cast<unsigned>(gpAddr));
+        else
+            std::snprintf(gp, sizeof(gp), "未定位");
+        ConsoleTheme::TextRow("GTA+ 引擎标志", gp, gpAddr != 0, false);
+
+
+
+        if (ConsoleTheme::ButtonRow("导出诊断（写 GTA5_DMA_diag.txt）", UiIcon::Save, false))
+            Diagnostics::WriteReport(nullptr);
+        ConsoleTheme::BoxEnd();
+        col.Advance(0, TitledBoxHeight(3));
+    }
+
+    /* ================== 右列：只读自检 ================== */
+
+    {
+        col.Place(1);
+        ConsoleTheme::BoxBeginPixels("eco_threads", 290.0f, "脚本线程（只读）", col.width);
+
+        ConsoleTheme::TextRow("数组", ScriptThreads::GetSummary(), ScriptThreads::IsReady(), true);
+
+        const ImGuiTableFlags flags = ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV |
+                                      ImGuiTableFlags_ScrollY | ImGuiTableFlags_SizingStretchProp;
+        if (ImGui::BeginTable("##eco_thread_list", 3, flags, ImVec2(0.0f, 190.0f)))
+        {
+            ImGui::TableSetupScrollFreeze(0, 1);
+            ImGui::TableSetupColumn("脚本", ImGuiTableColumnFlags_WidthFixed, 190.0f);
+            ImGui::TableSetupColumn("hash", ImGuiTableColumnFlags_WidthFixed, 90.0f);
+            ImGui::TableSetupColumn("locals 基址（栈）", ImGuiTableColumnFlags_WidthStretch);
+            ImGui::TableHeadersRow();
+
+            const uint32_t total = ScriptThreads::Count();
+            for (uint32_t i = 0; i < total && i < 64; ++i)
+            {
+                ScriptThreads::ThreadInfo info{};
+                if (!ScriptThreads::Get(i, info))
+                    continue;
+
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::TextUnformatted(info.name[0] ? info.name : "(无名)");
+                ImGui::TableNextColumn();
+                ImGui::Text("0x%08X", info.hash);
+                ImGui::TableNextColumn();
+                ImGui::Text("0x%llX", static_cast<unsigned long long>(info.stack));
+            }
+            ImGui::EndTable();
+        }
+        ConsoleTheme::BoxEnd();
+        col.Advance(1, TitledBoxPixels(290.0f));
+    }
+
+    {
+        col.Place(1);
+        ConsoleTheme::BoxBeginPixels("eco_globals", 330.0f, "脚本全局自检", col.width);
+
+        const ImGuiTableFlags flags = ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV |
+                                      ImGuiTableFlags_ScrollY | ImGuiTableFlags_SizingStretchProp;
+        if (ImGui::BeginTable("##eco_global_list", 4, flags, ImVec2(0.0f, 280.0f)))
+        {
+            ImGui::TableSetupScrollFreeze(0, 1);
+            ImGui::TableSetupColumn("动作格", ImGuiTableColumnFlags_WidthFixed, 190.0f);
+            ImGui::TableSetupColumn("索引", ImGuiTableColumnFlags_WidthFixed, 78.0f);
+            ImGui::TableSetupColumn("实读值", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+            ImGui::TableSetupColumn("状态", ImGuiTableColumnFlags_WidthFixed, 90.0f);
+            ImGui::TableHeadersRow();
+
+            for (uint32_t i = 0; i < ScriptGlobals::kSlotCount; ++i)
+            {
+                ImGui::TableNextRow();
+                ImGui::PushID(static_cast<int>(i));
+
+                ImGui::TableNextColumn();
+                const char* rawName = ScriptGlobals::GetEntryName(i);
+                const char* purpose = ScriptGlobals::GetEntryPurpose(i);
+                ImGui::TextUnformatted((purpose && purpose[0] && purpose[0] != '?') ? purpose : rawName);
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("%s", rawName);
+
+                ImGui::TableNextColumn();
+                ImGui::Text("0x%X", ScriptGlobals::GetGlobalIndex(i));
+
+                ImGui::TableNextColumn();
+                bool ok = false;
+                const int32_t live = ScriptGlobals::ReadLive(i, &ok);
+                if (ok)
+                    ImGui::Text("%d", live);
+                else
+                    ImGui::TextDisabled("-");
+
+                ImGui::TableNextColumn();
+                if (ScriptGlobals::IsResolved(i))
+                    ImGui::TextColored(ConsoleTheme::Success(), "已定位");
+                else
+                    ImGui::TextColored(ConsoleTheme::Danger(), "未定位");
+
+                ImGui::PopID();
+            }
+            ImGui::EndTable();
+        }
+        ConsoleTheme::BoxEnd();
+        col.Advance(1, TitledBoxPixels(330.0f));
+    }
+
+    col.End();
 }
 
 /* ---------- 系统设置 ---------- */

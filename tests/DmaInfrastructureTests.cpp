@@ -7,6 +7,7 @@
 
 #include "../GTA5_DMA/GTA5_DMA/Core/MemoryBackend.h"
 #include "../GTA5_DMA/GTA5_DMA/Features/ArmorManager.h"
+#include "../GTA5_DMA/GTA5_DMA/Features/ScriptGlobalsTable.h"
 #include "../GTA5_DMA/GTA5_DMA/Core/OffsetResolver.h"
 #include "../GTA5_DMA/GTA5_DMA/Core/PatternScanner.h"
 
@@ -338,10 +339,75 @@ int main()
 
     const auto enhancedCatalog = OffsetResolver::GetCatalog(GameType::GTA5_Enhanced);
     assert(enhancedCatalog.size() == 10);
+
+    // ---- 轮次15：偏移解析确定性回归 ----
+    // (1) 备用特征码必须用自己的 rel32 位移/指令长度。
+    //     主模式 48 8B 8E …/disp=10/insn=14；备用 48 8B 0D …/disp=3/insn=7。
+    //     写 0 表示沿用主模式 —— 沿用会算出越界地址（正是实机 GlobalPtr 事故的机理）。
+    OffsetResolver::SignatureSpec altSpec{
+        "AltOffsets",
+        "48 8B 8E ?? ?? ?? ??",
+        10,
+        14,
+        1,
+        {"48 8B 0D ?? ?? ??"}
+    };
+    const auto inheritedAlt = OffsetResolver::ResolveOne(
+        altSpec, resolverBytes, 0x140001000, 0x140000000, 0x4000000, 0x443D1E8);
+    assert(inheritedAlt.source == OffsetResolver::OffsetSource::Fallback);
+    assert(inheritedAlt.value == 0x443D1E8);
+
+    altSpec.alternativeDisplacementOffset[0] = 3;
+    altSpec.alternativeInstructionSize[0] = 7;
+    const auto explicitAlt = OffsetResolver::ResolveOne(
+        altSpec, resolverBytes, 0x140001000, 0x140000000, 0x4000000, 0x443D1E8);
+    assert(explicitAlt.source == OffsetResolver::OffsetSource::Pattern);
+    assert(explicitAlt.value == 0x1010);
+
+    // (2) 校验器拒绝 → 回退静态值，拒绝原因必须写进诊断
+    int validatorCalls = 0;
+    const auto rejectCandidate = [&validatorCalls](std::uintptr_t, std::string* reason) {
+        ++validatorCalls;
+        if (reason)
+            *reason = "test rejected the candidate";
+        return false;
+    };
+    const auto rejected = OffsetResolver::ResolveOne(
+        worldSpec, resolverBytes, 0x140001000, 0x140000000, 0x4000000, 0x443D1E8, rejectCandidate);
+    assert(rejected.source == OffsetResolver::OffsetSource::Fallback);
+    assert(rejected.value == 0x443D1E8);
+    assert(validatorCalls == 1);
+    assert(rejected.diagnostic.find("test rejected the candidate") != std::string::npos);
+    assert(!rejected.candidates.empty());
+    assert(!rejected.validated);
+
+    // (3) 校验器通过 → 即使多命中也能挑出被校验的候选（FindAll 全量枚举）
+    const auto acceptFirstCandidate = [](std::uintptr_t candidate, std::string*) {
+        return candidate == 0x140001010;
+    };
+    const auto multiAccepted = OffsetResolver::ResolveOne(
+        worldSpec, duplicateBytes, 0x140001000, 0x140000000, 0x4000000, 0x443D1E8, acceptFirstCandidate);
+    assert(multiAccepted.source == OffsetResolver::OffsetSource::Pattern);
+    assert(multiAccepted.value == 0x1010);
+    assert(multiAccepted.validated);
+
+    // (4) GlobalPtr 目录项：老版 GTA5.exe 备用签名已移除，主特征码仍是 YimMenuV2 的 ScriptGlobals
+    bool globalSpecChecked = false;
+    for (const auto& spec : enhancedCatalog)
+    {
+        if (spec.name == "GlobalPtr")
+        {
+            globalSpecChecked = true;
+            assert(spec.alternativeCount == 0);
+            assert(spec.displacementOffset == 10);
+            assert(spec.instructionSize == 14);
+        }
+    }
+    assert(globalSpecChecked);
     assert(enhancedCatalog[0].name == "WorldPtr");
     assert(enhancedCatalog[0].pattern == "48 8B 0D ?? ?? ?? ?? 48 85 C9 74 ?? 48 8B 49 ?? 48 8D");
     assert(enhancedCatalog[1].name == "GlobalPtr");
-    assert(enhancedCatalog[1].pattern == "48 8D 3D ?? ?? ?? ?? 31 DB 48 8D 2D ?? ?? ?? ?? 4C");
+    assert(enhancedCatalog[1].pattern == "48 8B 8E ?? ?? ?? ?? 48 8D 15 ?? ?? ?? ?? 49 89 D8");
     assert(enhancedCatalog[2].name == "BlipPtr");
     assert(enhancedCatalog[2].pattern == "48 8D 0D ? ? ? ? 41 B8 ? ? ? ? 31 D2 E8 ? ? ? ? 8B 0D");
     assert(enhancedCatalog[3].name == "PlayerMgrPtr");
@@ -359,6 +425,25 @@ int main()
     assert(enhancedCatalog[9].name == "VehiclePoolPtr");
     assert(enhancedCatalog[9].pattern == "48 8B 05 ? ? ? ? ?? ?? ?? 48 83 78 18 0D");
     assert(OffsetResolver::GetCatalog(GameType::GTA5).empty());
+
+    // ---- 第17轮：脚本全局动作格登记表（索引 / 区间 / 编译期断言） ----
+    static_assert(ScriptGlobalTable::kEntryCount == 12, "script-global table size changed");
+    static_assert(ScriptGlobalTable::kSafeEntryCount == 7, "safe-claim entry window changed");
+    assert(std::strcmp(ScriptGlobalTable::kEntries[ScriptGlobalTable::kFirstSafeEntry].name, "SAFE_CLAIM_NIGHTCLUB") == 0);
+    assert(ScriptGlobalTable::kEntries[ScriptGlobalTable::kFirstSafeEntry].index == 2708943u);
+    assert(ScriptGlobalTable::kEntries[ScriptGlobalTable::kLastSafeEntry].index == 2709001u);
+    assert(ScriptGlobalTable::kEntries[7].index == 23040u);
+    assert(ScriptGlobalTable::kEntries[7].maxValue == 8);
+    assert(ScriptGlobalTable::kEntries[10].index == 1970586u);
+    assert(ScriptGlobalTable::kEntries[11].index == 1970587u);
+    assert(ScriptGlobalTable::kGtaPlusBitsValue == 0x0A);
+    assert(ScriptGlobalTable::kPhoneSilencedState == 6);
+    for (const auto& entry : ScriptGlobalTable::kEntries)
+    {
+        assert(entry.name != nullptr && entry.purpose != nullptr);
+        assert(entry.minValue <= entry.maxValue);
+        assert(entry.index != 0u);
+    }
 
     return 0;
 }

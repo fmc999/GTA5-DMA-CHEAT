@@ -10,6 +10,9 @@ enum class MenuPage {
     TELEPORT,       // 传送功能
     VEHICLE,        // 载具功能
     SESSION,        // 战局玩家
+    AIM,            // 自瞄
+    PROGRESS,       // 进度与解锁（tunable：RP 倍率 / 外貌费用 / 踢出计时）
+    ECONOMY,        // 经济与自动化（脚本全局动作格：保险箱领取 / 静音来电 / GTA+）
     TIME,           // 已停用：时间控制
     HEIST_DIVIDEND, // 已停用：抢劫分红
     SETTINGS        // 设置
@@ -36,6 +39,9 @@ public:
     void RenderTeleportPageContent();
     void RenderVehiclePageContent();
     void RenderSessionPageContent();
+    void RenderAimPageContent();
+    void RenderProgressPageContent();
+    void RenderEconomyPageContent();
     void RenderSettingsPageContent();
 
 private:

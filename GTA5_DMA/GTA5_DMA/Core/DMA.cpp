@@ -5,7 +5,11 @@
 #include "OffsetResolver.h"
 #include "PatternScanner.h"
 
+#include <cstdio>
+
 #include "Features.h"
+#include "Diagnostics.h"
+#include "RuntimeTables.h"
 #include "VehicleList.h"
 #include "ArmorManager.h"
 #include "HealthManager.h"
@@ -36,7 +40,11 @@ MemoryBackend& DMA::Memory() noexcept
 
 bool DMA::Initialize()
 {
-	LPCSTR args[] = { "","-device","FPGA" };
+	// 第19轮：运行时表要在**解析偏移/tunable 之前**就位 ——
+	// 「名字/值 → 索引」和「特征码追加候选」都在这里读进来（外部文件改动立刻生效，不必重编译）。
+	RuntimeTables::Initialize();
+
+	LPCSTR args[] = { "", "-device", "FPGA" };
 
 	vmh = VMMDLL_Initialize(3, args);
 
@@ -68,6 +76,20 @@ bool DMA::Initialize()
 		Memory().Attach(vmh, PID);
 		// 特征码动态解析偏移（仅 Enhanced；失败自动回退静态值）
 		ResolveRuntimeOffsets();
+		// 自瞄补丁点解析（四处特征码；任一失败则该补丁保持禁用）
+		AimAid::Resolve();
+		// 空闲踢出 tunable 只依赖 GlobalPtr，不依赖本地玩家世界链。
+		// 在这里解析可避免玩家尚未进入战局时主循环提前失败而始终无法探测。
+		NoIdleKick::Resolve();
+		// tunable 块：值锚动态定位 + 默认值体检（进度类功能与踢出保护都依赖它）。
+		Tunables::Resolve();
+
+		// 第17轮：脚本线程（只读枚举，为下一轮 locals 写入打底）+ 经济与自动化（全局动作格）
+		ScriptThreads::LogRunningScripts(10);
+		EconomyFeatures::Resolve();
+
+		// 第18轮：把本次解析结果落盘（设备独占，外部进程拿不到；常驻实例自证）
+		Diagnostics::WriteReport();
 		return 1;
 	}
 
@@ -136,8 +158,17 @@ bool DMA::DMAThreadEntry()
 		// HeistDividend::OnDMAFrame();
 		ArmorManager::OnDMAFrame();
 		HealthManager::OnDMAFrame();
+		AimAid::OnDMAFrame();
+		NoIdleKick::OnDMAFrame();
+
+		// 进度类 tunable（RP 倍率 / 外貌免冷却 / 免费）：开着的时候每帧复查重写。
+		ProgressFeatures::OnDMAFrame();
+		EconomyFeatures::OnDMAFrame();   // 内部含 ScriptGlobals::OnFrame()（动作格脉冲还原）
 		PlayerList::OnDMAFrame();
 	VehicleList::OnDMAFrame();
+
+		// 载具修复：只有收到请求时才写，常态零开销。
+		VehicleRepair::OnDMAFrame();
 	}
 
 	DMA::Close();
@@ -276,6 +307,14 @@ bool DMA::UpdateEssentials()
 
 bool DMA::Close()
 {
+	RuntimeTables::Shutdown();
+	// 先写回内存补丁，再断开 VM 和 MemoryBackend，避免退出时把补丁留在游戏进程。
+	AimAid::PrepareForClose();
+	NoIdleKick::PrepareForClose();
+	// tunable 还原：把本会话写过的单元按记录写回原值。
+	EconomyFeatures::PrepareForClose();
+	ScriptThreads::Reset();
+	Tunables::PrepareForClose();
 	Memory().Reset();
 	const VMM_HANDLE handle = vmh;
 	vmh = nullptr;
@@ -379,6 +418,96 @@ bool DMA::ResolveRuntimeOffsets()
 
 	std::println("[Offsets] scanning '{}' section ({} bytes) for signatures...", section->name, section->bytes.size());
 
+	// 零填充洞体检：扫描 reader 带 ZEROPAD_ON_FAIL —— 换出/未驻留的页会被填 0，
+	// 特征码若落在这些页上就会失配，从而回退备用特征码或静态值（本次 GlobalPtr 事故的入口）。
+	// 把洞的数量与首个位置打出来，失配时能立刻分辨是「特征码失效」还是「页没读到」。
+	{
+		const auto& scanBytes = section->bytes;
+		std::size_t zeroPages = 0;
+		std::size_t firstZeroPage = 0;
+		bool haveFirstZeroPage = false;
+		for (std::size_t page = 0; page + 4096 <= scanBytes.size(); page += 4096)
+		{
+			bool allZero = true;
+			for (std::size_t probe = 0; probe < 4096; ++probe)
+			{
+				if (scanBytes[page + probe] != 0)
+				{
+					allZero = false;
+					break;
+				}
+			}
+			if (allZero)
+			{
+				++zeroPages;
+				if (!haveFirstZeroPage)
+				{
+					firstZeroPage = page;
+					haveFirstZeroPage = true;
+				}
+			}
+		}
+		if (zeroPages > 0)
+		{
+			std::println("[Offsets] 扫描缓冲含 {} 个全零页（换出/未驻留，ZEROPAD 填充），首个在 +0x{:X}；"
+			             "落在这些页上的特征码会失配", zeroPages, firstZeroPage);
+		}
+	}
+
+	// ScriptGlobals（rage::scrGlobal 的 64 分块指针表）候选体检：
+	// 真身的分块项要么是 0（该分块尚未分配），要么是**可读、16 字节对齐的用户空间指针**。
+	// 实机对照（2026-09-17 同一进程）：
+	//   0x3ED15A8（YimMenuV2 ScriptGlobals 特征码解析值，= 静态兜底值）→ 15 个非 0 项全部可读；
+	//   0x4737178（老版 GTA5.exe 备用签名算出的值）→ 13 个非 0 项里 4 个不可读 → 必须被拒绝。
+	const auto validateScriptGlobals = [](std::uintptr_t candidate, std::string* reason) -> bool {
+		constexpr std::size_t kChunkCount = 64;
+		constexpr int kMinNonZeroChunks = 8;
+		std::uintptr_t chunks[kChunkCount] = {};
+		if (!DMA::Memory().Read(candidate, chunks, sizeof(chunks)))
+		{
+			if (reason)
+				*reason = "ScriptGlobals 候选的分块表读不出来";
+			return false;
+		}
+
+		int nonZero = 0;
+		for (std::size_t i = 0; i < kChunkCount; ++i)
+		{
+			const std::uintptr_t chunk = chunks[i];
+			if (chunk == 0)
+				continue;
+			++nonZero;
+			if ((chunk & 0xF) != 0 || chunk >= 0x7FFFFFFFFFFFull)
+			{
+				char buf[128];
+				std::snprintf(buf, sizeof(buf), "分块 %zu 不是 16 字节对齐的用户空间指针 (0x%llX)",
+				              i, static_cast<unsigned long long>(chunk));
+				if (reason)
+					*reason = buf;
+				return false;
+			}
+			std::uint64_t probe = 0;
+			if (!DMA::Memory().Read(chunk, &probe, sizeof(probe)))
+			{
+				char buf[128];
+				std::snprintf(buf, sizeof(buf), "分块 %zu 指向的内存不可读 (0x%llX)",
+				              i, static_cast<unsigned long long>(chunk));
+				if (reason)
+					*reason = buf;
+				return false;
+			}
+		}
+
+		if (nonZero < kMinNonZeroChunks)
+		{
+			char buf[128];
+			std::snprintf(buf, sizeof(buf), "分块表只有 %d 个非 0 项（要求 >= %d）", nonZero, kMinNonZeroChunks);
+			if (reason)
+				*reason = buf;
+			return false;
+		}
+		return true;
+	};
 	// 逐个解析并应用（成功的立即写入 Offsets::，失败保持静态值）
 	int resolved = 0;
 	const auto catalog = OffsetResolver::GetCatalog(GameType::GTA5_Enhanced);
@@ -397,8 +526,12 @@ bool DMA::ResolveRuntimeOffsets()
     else if (spec.name == "VehiclePoolPtr") fallback = Offsets::VehiclePoolPtr;
 		else continue;
 
+		// 候选校验器：只配给「算错会静默危害功能」的偏移（目前是 GlobalPtr / ScriptGlobals）。
+		const OffsetResolver::CandidateValidator validator =
+			spec.name == "GlobalPtr" ? OffsetResolver::CandidateValidator(validateScriptGlobals)
+			                          : OffsetResolver::CandidateValidator{};
 		const auto result = OffsetResolver::ResolveOne(
-			spec, section->bytes, section->runtimeAddress, section->moduleBase, section->imageSize, fallback);
+			spec, section->bytes, section->runtimeAddress, section->moduleBase, section->imageSize, fallback, validator);
 
 		if (result.source == OffsetResolver::OffsetSource::Pattern)
 		{
@@ -413,7 +546,8 @@ bool DMA::ResolveRuntimeOffsets()
 			else if (spec.name == "PedPoolPtr") Offsets::PedPoolPtr = result.value;
     else if (spec.name == "VehiclePoolPtr") Offsets::VehiclePoolPtr = result.value;
 
-			std::println("[Offsets] {} = 0x{:X} (pattern)", result.name, result.value);
+			std::println("[Offsets] {} = 0x{:X} (pattern{})", result.name, result.value,
+			             result.validated ? ", validated" : "");
 			++resolved;
 		}
 		else

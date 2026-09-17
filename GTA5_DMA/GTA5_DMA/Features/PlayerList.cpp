@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <cstring>
 #include <mutex>
 
@@ -22,6 +23,11 @@ namespace
     std::atomic<uint8_t> g_PendingExplode{ 0xFF };
     std::atomic<uint8_t> g_PendingKill{ 0xFF };
     std::atomic<uint8_t> g_PendingTeleportTo{ 0xFF };
+    std::atomic<uint8_t> g_PendingBring{ 0xFF };
+
+    // 「拉到我这里」最近一次落地报告（UI 线程读取显示）
+    std::mutex g_BringReportMutex;
+    BringReport g_BringReport;
     std::atomic<int> g_TotalJoins{ 0 };    // 本进程累计加入人次
     std::atomic<int> g_TotalLeaves{ 0 };   // 本进程累计离开人次
 
@@ -182,6 +188,10 @@ void PlayerList::OnDMAFrame()
     const uint8_t teleportTarget = g_PendingTeleportTo.exchange(0xFF);
     if (teleportTarget != 0xFF)
         TeleportToPlayer(teleportTarget);
+
+    const uint8_t bringTarget = g_PendingBring.exchange(0xFF);
+    if (bringTarget != 0xFF)
+        BringPlayerToMe(bringTarget);
 }
 
 void PlayerList::RefreshPlayers()
@@ -519,6 +529,106 @@ void PlayerList::TeleportToPlayer(uint8_t playerIndex)
             DMA::VehicleNavigationAddress + offsetof(CNavigation, Position),
             &target, sizeof(target));
     }
+}
+
+void PlayerList::RequestBring(uint8_t playerIndex)
+{
+    g_PendingBring.store(playerIndex);
+}
+
+BringReport PlayerList::GetLastBring()
+{
+    std::lock_guard<std::mutex> lock(g_BringReportMutex);
+    return g_BringReport;
+}
+
+void PlayerList::BringPlayerToMe(uint8_t playerIndex)
+{
+    // 目标 → 我（Bring）：只把「目标玩家的导航位置」写到我旁边。
+    // 本地玩家的导航位置在本函数内【绝不写入】——那是「传送到此玩家」的方向。
+    {
+        std::lock_guard<std::mutex> lock(g_BringReportMutex);
+        g_BringReport = {};
+        g_BringReport.Sent = true;
+        g_BringReport.PlayerIndex = playerIndex;
+    }
+
+    if (DMA::NavigationAddress == 0)
+        return;
+
+    const Vec3 me = DMA::LocalPlayerLocation;   // 只读：自己的坐标不写
+    if (me.x == 0.0f && me.y == 0.0f)
+    {
+        std::println("[BRING] 跳过: 本地玩家坐标未就绪（等待首帧定位）");
+        return;
+    }
+
+    const uintptr_t pedAddress = FindPedByPlayerIndex(playerIndex);
+    if (!pedAddress)
+    {
+        std::println("[BRING] 跳过: 找不到目标玩家的 Ped（索引 {}）", playerIndex);
+        return;
+    }
+
+    uintptr_t navigation = 0;
+    if (!DMA::Memory().Read(pedAddress + offsetof(PED, pCNavigation), &navigation, sizeof(navigation)) || !navigation)
+    {
+        std::println("[BRING] 跳过: 目标 Ped 导航链未就绪 0x{:X}", pedAddress);
+        return;
+    }
+
+    Vec3 before = {};
+    DMA::Memory().Read(navigation + offsetof(CNavigation, Position), &before, sizeof(before));
+
+    // 落点 = 我旁边错开 2 米（与其它传送同一约定，防卡模）
+    Vec3 target = me;
+    target.x += 2.0f;
+    target.y += 2.0f;
+
+    if (!DMA::Memory().Write(navigation + offsetof(CNavigation, Position), &target, sizeof(target)))
+    {
+        std::println("[BRING] 失败: 目标导航位置写入失败 nav=0x{:X}", navigation);
+        return;
+    }
+
+    Vec3 readback = {};
+    const bool ok = DMA::Memory().Read(navigation + offsetof(CNavigation, Position), &readback, sizeof(readback)) &&
+                    std::fabs(readback.x - target.x) < 1.0f &&
+                    std::fabs(readback.y - target.y) < 1.0f;
+
+    // 目标名字：从快照里按 Ped 地址取（拿不到就留空）
+    char name[20] = {};
+    {
+        std::lock_guard<std::mutex> lock(g_PlayerMutex);
+        for (const SessionPlayer& player : g_Players)
+        {
+            if (player.PedAddress == pedAddress)
+            {
+                std::memcpy(name, player.Name, sizeof(name) - 1);
+                break;
+            }
+        }
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(g_BringReportMutex);
+        g_BringReport.Ok = ok;
+        std::memcpy(g_BringReport.Name, name, sizeof(g_BringReport.Name));
+        g_BringReport.Me[0] = me.x;
+        g_BringReport.Me[1] = me.y;
+        g_BringReport.Me[2] = me.z;
+        g_BringReport.TargetBefore[0] = before.x;
+        g_BringReport.TargetBefore[1] = before.y;
+        g_BringReport.TargetBefore[2] = before.z;
+        g_BringReport.Landed[0] = target.x;
+        g_BringReport.Landed[1] = target.y;
+        g_BringReport.Landed[2] = target.z;
+    }
+
+    std::println("[BRING] dir=它->我 idx={} ped=0x{:X} 我=({:.1f},{:.1f},{:.1f}) "
+                 "目标原位置=({:.1f},{:.1f},{:.1f}) 落点=({:.1f},{:.1f},{:.1f}) 读回=({:.1f},{:.1f}) ok={}",
+                 playerIndex, pedAddress, me.x, me.y, me.z, before.x, before.y, before.z,
+                 target.x, target.y, target.z, readback.x, readback.y, ok ? 1 : 0);
 }
 
 uintptr_t PlayerList::FindPedByPlayerIndex(uint8_t playerIndex)

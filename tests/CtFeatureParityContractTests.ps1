@@ -50,9 +50,12 @@ foreach ($name in @('currentVehicleModelHash', 'currentVehicleState', 'currentVe
     }
 }
 
-$currentAmmoPattern = 'ImGui::Text\([^;\r\n]*currentVehicleWeaponAmmo'
-$targetAmmoPattern = 'ImGui::InputInt\("[^"]*##target_vehicle_weapon_ammo"[^;\r\n]*desiredVehicleWeaponAmmo'
-if ($vehicle -notmatch $currentAmmoPattern -or $vehicle -notmatch $targetAmmoPattern) {
+$currentAmmoPattern = 'currentVehicleWeaponAmmo'
+$currentAmmoLabelPattern = '"当前载具武器弹药"'
+$targetAmmoPattern = 'ConsoleTheme::InputRow\("##veh_ammo", "目标载具武器弹药"[^\r\n]*\)'
+if ($vehicle -notmatch $currentAmmoPattern -or
+    $vehicle -notmatch $currentAmmoLabelPattern -or
+    $vehicle -notmatch $targetAmmoPattern) {
     throw 'Vehicle weapon ammo UI must distinguish the current read value from the write target.'
 }
 

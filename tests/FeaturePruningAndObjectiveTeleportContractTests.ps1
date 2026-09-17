@@ -1,11 +1,11 @@
 ﻿$ErrorActionPreference = 'Stop'
 
-$consoleShell = Get-Content -Raw 'GTA5_DMA/GTA5_DMA/UI/ConsoleShell.cpp'
-$dma = Get-Content -Raw 'GTA5_DMA/GTA5_DMA/Core/DMA.cpp'
-$menu = Get-Content -Raw 'GTA5_DMA/GTA5_DMA/UI/MenuManager.cpp'
-$teleport = Get-Content -Raw 'GTA5_DMA/GTA5_DMA/Features/Teleport.cpp'
-$teleportHeader = Get-Content -Raw 'GTA5_DMA/GTA5_DMA/Features/Teleport.h'
-$frame = Get-Content -Raw 'GTA5_DMA/GTA5_DMA/UI/MyImGui.cpp'
+$consoleShell = Get-Content -Raw -Encoding UTF8 'GTA5_DMA/GTA5_DMA/UI/ConsoleShell.cpp'
+$dma = Get-Content -Raw -Encoding UTF8 'GTA5_DMA/GTA5_DMA/Core/DMA.cpp'
+$menu = Get-Content -Raw -Encoding UTF8 'GTA5_DMA/GTA5_DMA/UI/MenuManager.cpp'
+$teleport = Get-Content -Raw -Encoding UTF8 'GTA5_DMA/GTA5_DMA/Features/Teleport.cpp'
+$teleportHeader = Get-Content -Raw -Encoding UTF8 'GTA5_DMA/GTA5_DMA/Features/Teleport.h'
+$frame = Get-Content -Raw -Encoding UTF8 'GTA5_DMA/GTA5_DMA/UI/MyImGui.cpp'
 
 $activeConsole = $consoleShell -replace '(?m)^\s*//.*$', ''
 $activeDma = $dma -replace '(?m)^\s*//.*$', ''
@@ -35,8 +35,9 @@ if ($consoleShell -notmatch 'retained' -or $dma -notmatch 'retained' -or $menu -
 if ($teleportHeader -notmatch 'RequestObjectiveTeleport' -or $teleportHeader -notmatch 'GetObjectiveCoords') {
     throw 'Teleport 缺少任务点传送接口。'
 }
-if ($teleport -notmatch 'ImGui::Button\(.*F6' -or $teleport -notmatch 'ImGui::SameLine\(\)') {
-    throw '任务点按钮未放在标记点按钮旁边。'
+if ($teleport -notmatch 'ButtonRow\("传送到标记点 \(F5\)"' -or
+    $teleport -notmatch 'ButtonRow\("传送到任务点 \(F6\)"') {
+    throw '传送操作卡缺少 F5 标记点或 F6 任务点按钮。'
 }
 if ($teleport -notmatch 'GameType::GTA5_Enhanced') {
     throw '任务点传送缺少增强版限制。'

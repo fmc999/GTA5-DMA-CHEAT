@@ -13,6 +13,11 @@
 
 namespace OffsetResolver
 {
+    // 候选校验器（可选）：把算出来的候选地址交给调用方做只读体检（是否可读、结构是否合理）。
+    // 返回 false 表示该候选不可信；ResolveOne 会换下一个候选 / 下一条特征码 / 回退静态值。
+    // 不传校验器时保持旧的「唯一命中」语义（多命中直接放弃）。
+    using CandidateValidator = std::function<bool(std::uintptr_t candidateAddress, std::string* reason)>;
+
     struct SignatureSpec
     {
         std::string_view name;
@@ -23,6 +28,12 @@ namespace OffsetResolver
         static constexpr std::size_t kMaxAlternatives = 4;
         std::size_t alternativeCount = 0;
         std::string_view alternativePatterns[kMaxAlternatives]{};
+        // 每条备用特征码各自的 rel32 位移 / 指令长度（0 = 沿用主特征码的值）。
+        // 必须能单独指定：主/备用是两条不同指令（例：主 48 8D 15 → disp=10/insn=14；
+        // 备用 48 8B 0D → disp=3/insn=7）。沿用主模式的值会算出完全错误的地址，
+        // 进而把垃圾地址当成真身采用（实机事故：GlobalPtr 解析出 0x4737178 而不是 0x3ED15A8）。
+        std::size_t alternativeDisplacementOffset[kMaxAlternatives]{};
+        std::size_t alternativeInstructionSize[kMaxAlternatives]{};
     };
 
     enum class OffsetSource
@@ -37,6 +48,8 @@ namespace OffsetResolver
         std::uintptr_t value = 0;
         OffsetSource source = OffsetSource::Fallback;
         std::string diagnostic;
+        std::vector<std::uintptr_t> candidates;   // 本次尝试过的候选（诊断/测试用）
+        bool validated = false;                   // 是否通过了调用方的候选校验器
     };
 
     struct OffsetResolutionReport
@@ -64,7 +77,8 @@ namespace OffsetResolver
         std::uintptr_t sectionRuntimeAddress,
         std::uintptr_t moduleBase,
         std::uint32_t imageSize,
-        std::uintptr_t fallback);
+        std::uintptr_t fallback,
+        const CandidateValidator& validator = {});
 
     // diagnostic: 失败原因（写入具体阶段与读到的字节，便于定位 FPGA 读取异常）
     std::optional<ExecutableSection> LoadExecutableSection(

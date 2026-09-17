@@ -198,7 +198,12 @@ public:
 	uint32_t GodBits; //0x0188
 	char pad_018C[244]; //0x018C
 	float Health; //0x0280
-	char pad_0284[1756]; //0x0284
+	char pad_0284[1452]; //0x0284
+	float BodyHealth; //0x0830  车身健康（YimMenu CVehicle::m_BodyHealth）
+	float PetrolTankHealth; //0x0834  油箱健康（YimMenu CVehicle::m_PetrolTankHealth）
+	char pad_0838[216]; //0x0838
+	float EngineHealth; //0x0910  引擎健康（YimMenu CVehicle::m_EngineHealth）
+	char pad_0914[76]; //0x0914
 	class CHandlingData* pCHandlingData; //0x0960
 	char pad_0968[16]; //0x0968
 	uint8_t FreezeFlag; //0x0978
@@ -211,6 +216,10 @@ static_assert(offsetof(CVehicle, pCModelInfo) == 0x20);
 static_assert(offsetof(CVehicle, VehicleState) == 0xD8);
 static_assert(offsetof(CVehicle, FreezeFlag) == 0x978);
 static_assert(offsetof(CVehicle, VehicleWeaponAmmo) == 0x12E4);
+static_assert(offsetof(CVehicle, Health) == 0x280);
+static_assert(offsetof(CVehicle, BodyHealth) == 0x830);
+static_assert(offsetof(CVehicle, PetrolTankHealth) == 0x834);
+static_assert(offsetof(CVehicle, EngineHealth) == 0x910);
 
 class CHandlingData
 {

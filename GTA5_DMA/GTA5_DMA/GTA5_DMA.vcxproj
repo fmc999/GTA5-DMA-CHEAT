@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|x64">
@@ -198,6 +198,16 @@
     <ClCompile Include="Features\WeaponInspector.cpp" />
     <ClCompile Include="Features\PlayerList.cpp" />
     <ClCompile Include="Features\VehicleList.cpp" />
+    <ClCompile Include="Features\VehicleRepair.cpp" />
+    <ClCompile Include="Features\AimAid.cpp" />
+    <ClCompile Include="Features\NoIdleKick.cpp" />
+    <ClCompile Include="Features\Tunables.cpp" />
+    <ClCompile Include="Features\ProgressFeatures.cpp" />
+    <ClCompile Include="Core\Diagnostics.cpp" />
+    <ClCompile Include="Core\RuntimeTables.cpp" />
+    <ClCompile Include="Features\ScriptGlobals.cpp" />
+    <ClCompile Include="Features\ScriptThreads.cpp" />
+    <ClCompile Include="Features\EconomyFeatures.cpp" />
     <ClCompile Include="UI\MyImGui.cpp" />
     <ClCompile Include="UI\Backdrop.cpp" />
     <ClCompile Include="UI\ConsoleShell.cpp" />
@@ -247,6 +257,18 @@
     <ClInclude Include="Features\WeaponInspector.h" />
     <ClInclude Include="Features\PlayerList.h" />
     <ClInclude Include="Features\VehicleList.h" />
+    <ClInclude Include="Features\VehicleRepair.h" />
+    <ClInclude Include="Features\AimAid.h" />
+    <ClInclude Include="Features\NoIdleKick.h" />
+    <ClInclude Include="Features\Tunables.h" />
+    <ClInclude Include="Features\ProgressFeatures.h" />
+    <ClInclude Include="Features\TunableTable.h" />
+    <ClInclude Include="Core\Diagnostics.h" />
+    <ClInclude Include="Core\RuntimeTables.h" />
+    <ClInclude Include="Features\ScriptGlobals.h" />
+    <ClInclude Include="Features\ScriptGlobalsTable.h" />
+    <ClInclude Include="Features\ScriptThreads.h" />
+    <ClInclude Include="Features\EconomyFeatures.h" />
     <ClInclude Include="UI\MyImGui.h" />
     <ClInclude Include="UI\Backdrop.h" />
     <ClInclude Include="UI\EmbeddedAssets.h" />

@@ -125,6 +125,47 @@ namespace PatternScanner
         return {ScanStatus::Found, matchOffset, {}};
     }
 
+    FindAllResult FindAll(std::span<const std::uint8_t> bytes, std::string_view pattern)
+    {
+        const auto parsed = ParsePattern(pattern);
+        if (!parsed)
+        {
+            return {ScanStatus::InvalidPattern, {}, "Pattern contains an invalid token."};
+        }
+
+        if (parsed->size() > bytes.size())
+        {
+            return {ScanStatus::NotFound, {}, "Pattern is larger than the scanned buffer."};
+        }
+
+        FindAllResult result{};
+        const std::size_t lastStart = bytes.size() - parsed->size();
+        for (std::size_t start = 0; start <= lastStart; ++start)
+        {
+            bool matches = true;
+            for (std::size_t index = 0; index < parsed->size(); ++index)
+            {
+                const PatternByte& expected = (*parsed)[index];
+                if (!expected.wildcard && bytes[start + index] != expected.value)
+                {
+                    matches = false;
+                    break;
+                }
+            }
+
+            if (matches)
+                result.offsets.push_back(start);
+        }
+
+        if (result.offsets.empty())
+        {
+            return {ScanStatus::NotFound, {}, "Pattern was not found."};
+        }
+
+        result.status = ScanStatus::Found;
+        return result;
+    }
+
     std::optional<std::uintptr_t> ResolveRelativeTarget(
         std::span<const std::uint8_t> bytes,
         std::size_t matchOffset,

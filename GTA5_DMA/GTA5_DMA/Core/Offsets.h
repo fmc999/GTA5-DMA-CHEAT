@@ -17,7 +17,9 @@ namespace Offsets
 {
 	// 基础指针偏移量 - 来自 GTA5_Enhanced 最新修复传送报错版.CT
 	static const uintptr_t WorldPtr_Enhanced = 0x0434A958;     // 48 8B 0D ? ? ? ? 49 8B 9E
-	static const uintptr_t GlobalPtr_Enhanced = 0x4737178;   // 48 8B 0D ? ? ? ? 0F 1F 44 00
+	// rage::scrGlobal 的 64-chunk 指针表。由 YimMenuV2 的 ScriptGlobals
+	// 特征码动态解析；静态值仅作为当前 Enhanced 构建的回退。
+	static const uintptr_t GlobalPtr_Enhanced = 0x3ED15A8;
 	static const uintptr_t BlipPtr_Enhanced = 0x03DEBD70;     // 4C 8D 3D ? ? ? ? 49 8B 34 C7
 	static const uintptr_t TimeBasePtr_Enhanced = 0x47CDF70;  // Time structure base address
 	

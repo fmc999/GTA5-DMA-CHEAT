@@ -49,3 +49,8 @@ _release_stage/
 
 # local UI-port scratch (patch scripts, diffs, verification notes, screenshots)
 _uiwork/
+
+# 第19轮：运行时表种子/覆盖文件（每台机器的 tunables.bin 路径不同，不入库）
+GTA5_DMA/x64/Release/GTA5_DMA_tunables.txt
+GTA5_DMA/x64/Release/GTA5_DMA_patterns.txt
+GTA5_DMA/x64/Release/GTA5_DMA_diag.txt

@@ -47,6 +47,20 @@ struct SessionPlayer
     int32_t  DeathsByPlayers = 0;
 };
 
+// 「拉到我这里」（Bring，参考 YimMenuV2 players/teleport/Bring.cpp）的落地报告。
+// 方向契约：只写目标玩家的导航位置；本地玩家自己的坐标在本轮里只读不写
+// （与既有「传送到此玩家」正好反方向）。
+struct BringReport
+{
+    bool    Sent = false;          // 是否收到过请求
+    bool    Ok = false;            // 写入 + 读回校验是否通过
+    uint8_t PlayerIndex = 0;       // 目标玩家网络索引
+    char    Name[20] = {};         // 目标玩家名称（取自快照）
+    float   Me[3] = {};            // 执行时的本地玩家坐标
+    float   TargetBefore[3] = {};  // 目标玩家执行前的坐标
+    float   Landed[3] = {};        // 实际写入的落点（我旁边错开 2 米）
+};
+
 class PlayerList
 {
 public:
@@ -67,6 +81,10 @@ public:
     static void RequestExplode(uint8_t playerIndex);
     static void RequestKill(uint8_t playerIndex);
     static void RequestTeleportTo(uint8_t playerIndex);   // 我 → 目标玩家
+    static void RequestBring(uint8_t playerIndex);        // 目标玩家 → 我（错开 2 米防卡模）
+
+    // 最近一次「拉到我这里」的落地报告（线程安全，UI 线程读取用于显示）
+    static BringReport GetLastBring();
 
 private:
     enum class PedAction
@@ -78,5 +96,6 @@ private:
     static void RefreshPlayers();
     static uintptr_t FindPedByPlayerIndex(uint8_t playerIndex);
     static void TeleportToPlayer(uint8_t playerIndex);
+    static void BringPlayerToMe(uint8_t playerIndex);
     static void ApplyPedAction(uint8_t playerIndex, PedAction action);
 };

@@ -49,6 +49,9 @@ const PageDef kPages[] = {
     { MenuPage::VEHICLE,  UiIcon::Car,       "载具编辑", "载具状态与操控参数" },
     { MenuPage::WEAPON,   UiIcon::Crosshair, "武器功能", "武器数据与命中参数" },
     { MenuPage::SESSION,  UiIcon::Globe,     "战局玩家", "在线玩家列表与玩家操作" },
+    { MenuPage::AIM,      UiIcon::Crosshair, "自瞄",     "辅助瞄准增强与静默追踪" },
+    { MenuPage::PROGRESS, UiIcon::Activity,  "进度与解锁", "tunable：RP 倍率、外貌费用与踢出计时" },
+    { MenuPage::ECONOMY,  UiIcon::Save,      "经济与自动化", "保险箱一键领取、静音来电、GTA+、脚本线程" },
     { MenuPage::TELEPORT, UiIcon::Pin,       "位置传送", "坐标、标记点与任务点" },
     { MenuPage::SETTINGS, UiIcon::Gear,      "系统设置", "主题、快捷键与发布信息" },
 };
@@ -384,6 +387,9 @@ void RenderPage(MenuManager& menu)
     case MenuPage::WEAPON:   menu.RenderWeaponPageContent(); break;
     case MenuPage::TELEPORT: menu.RenderTeleportPageContent(); break;
     case MenuPage::SESSION:  menu.RenderSessionPageContent(); break;
+    case MenuPage::AIM:      menu.RenderAimPageContent(); break;
+    case MenuPage::PROGRESS: menu.RenderProgressPageContent(); break;
+    case MenuPage::ECONOMY:  menu.RenderEconomyPageContent(); break;
     // DISABLED: 时间 / 任务分红路由 retained for later restoration。
     case MenuPage::SETTINGS: menu.RenderSettingsPageContent(); break;
     default: break;
