@@ -5,6 +5,7 @@
 
 #include "MyImGui.h"
 #include "BanCheck.h"
+#include "PhoneSilencer.h"
 #include "AppRuntime.h"
 #include "InputManager.h"
 #include "DMA.h"
@@ -57,6 +58,43 @@ int main(int argc, char** argv)
 	}
 
 	// 游戏时钟实测（--clock-probe）
+	// 静音来电探针（--phone-probe）：打印 4 个脚本全局的地址与当前值
+	if (argc > 1 && std::string(argv[1]) == "--phone-probe")
+	{
+		if (!DMA::Initialize())
+		{
+			std::printf("DMA 初始化失败\n");
+			return 1;
+		}
+		const PhoneSilencer::Snapshot s = PhoneSilencer::Read();
+		std::printf("[phone] 状态                    idx 23040 addr=0x%llX value=%d\n",
+			static_cast<unsigned long long>(s.addrState), s.state);
+		std::printf("[phone] 通话进行中              idx 23046 addr=0x%llX value=%d\n",
+			static_cast<unsigned long long>(s.addrProgress), s.progress);
+		std::printf("[phone] 有来电                  idx 23050 addr=0x%llX value=%d\n",
+			static_cast<unsigned long long>(s.addrIncoming), s.incoming);
+		std::printf("[phone] 来电角色                idx  8818 addr=0x%llX value=%d\n",
+			static_cast<unsigned long long>(s.addrCaller), s.caller);
+		std::printf("[phone] 全部可解析: %s\n", s.ok ? "是" : "否（多半不在线上战局）");
+		if (s.ok && argc > 2 && std::string(argv[2]) == "--write-test")
+		{
+			const int32_t before = s.state;
+			const int32_t target = 6;
+			int32_t after = 0;
+			bool ok = DMA::Memory().Write(s.addrState, &target, sizeof(target));
+			DMA::Memory().Read(s.addrState, &after, sizeof(after));
+			std::printf("[phone] 写测试：%d → 写 6 → 读回 %d（%s）\n",
+				before, after, (ok && after == 6) ? "通过" : "未通过");
+			// 还原原值，避免留下副作用
+			int32_t back = before;
+			DMA::Memory().Write(s.addrState, &back, sizeof(back));
+			DMA::Memory().Read(s.addrState, &after, sizeof(after));
+			std::printf("[phone] 已还原为 %d（读回 %d）\n", before, after);
+		}
+		DMA::Close();
+		return s.ok ? 0 : 2;
+	}
+
 	// BE 封禁查询自检（--ban-check <RID>）：不需要游戏/DMA，纯 BE 服务端库查询
 	if (argc > 2 && std::string(argv[1]) == "--ban-check")
 	{

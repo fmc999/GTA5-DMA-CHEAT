@@ -202,6 +202,7 @@
     <ClCompile Include="Features\NetTimeScan.cpp" />
     <ClCompile Include="Features\OffRadar.cpp" />
     <ClCompile Include="Features\TimeControl.cpp" />
+    <ClCompile Include="Features\PhoneSilencer.cpp" />
     <ClCompile Include="Features\VehicleNameOverrides.cpp" />
     <ClCompile Include="Features\VehicleList.cpp" />
     <ClCompile Include="Features\VehicleRepair.cpp" />
@@ -266,6 +267,7 @@
     <ClInclude Include="Features\NetTimeScan.h" />
     <ClInclude Include="Features\OffRadar.h" />
     <ClInclude Include="Features\TimeControl.h" />
+    <ClInclude Include="Features\PhoneSilencer.h" />
     <ClInclude Include="Features\VehicleNameOverrides.h" />
     <ClInclude Include="Features\VehicleList.h" />
     <ClInclude Include="Features\VehicleNames.h" />

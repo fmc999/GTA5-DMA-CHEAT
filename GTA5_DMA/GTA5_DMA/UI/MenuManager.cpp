@@ -16,6 +16,7 @@
 #include "NoWanted.h"
 #include "PlayerList.h"
 #include "BanCheck.h"
+#include "PhoneSilencer.h"
 #include "VehicleList.h"
 #include "VehicleRepair.h"
 #include "PlayerSpeed.h"
@@ -1482,6 +1483,25 @@ void MenuManager::RenderSettingsPageContent()
     // ---- 右列：通知 / 快捷键 / 关于 ----
     {
         layout2.Place(1);
+        // 第31轮：静音来电（纯脚本全局；Yim 的 SilencePhonecalls 同款逻辑）
+        {
+            ConsoleTheme::BoxBegin("settings_phone", 3, "来电", layout2.width);
+            bool silenceOn = PhoneSilencer::Enabled();
+            if (ConsoleTheme::ToggleRow("silence_phone_calls", "静音来电",
+                                        "有来电时自动把电话状态置为已静音（不碰 .text）", &silenceOn))
+            {
+                PhoneSilencer::SetEnabled(silenceOn);
+                UiToast::Show(silenceOn ? "已开启静音来电" : "已关闭静音来电", ToastKind::Info);
+            }
+            char phoneMsg[192];
+            std::snprintf(phoneMsg, sizeof(phoneMsg), "已静音 %d 通 · 最近来电角色 %d",
+                          PhoneSilencer::SilencedCount(), PhoneSilencer::LastCaller());
+            ConsoleTheme::TextRow("统计", phoneMsg, PhoneSilencer::SilencedCount() > 0);
+            ConsoleTheme::TextRow("状态", PhoneSilencer::LastResult(), false);
+            ConsoleTheme::BoxEnd();
+            ImGui::Dummy(ImVec2(0.0f, 4.0f));
+        }
+
         ConsoleTheme::BoxBegin("settings_session", 1, "战局通知", layout2.width);
         bool logJoinLeave = PlayerList::bLogJoinLeave.load();
         if (ConsoleTheme::ToggleRow("log_join_leave", "加入/离开日志", "在控制台输出玩家进出战局的消息", &logJoinLeave, false))

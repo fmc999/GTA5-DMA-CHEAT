@@ -1,4 +1,5 @@
 #include "pch.h"
+#include "PhoneSilencer.h"
 
 #include "Offsets.h"
 
@@ -145,6 +146,7 @@ bool DMA::DMAThreadEntry()
 
 		RefreshHealth::OnDMAFrame();
 		NoWanted::OnDMAFrame();
+		PhoneSilencer::OnDMAFrame();   // 静音来电（纯脚本全局）
 		WeaponInspector::OnDMAFrame();
 		Teleport::OnDMAFrame();
 		GodMode::OnDMAFrame();
